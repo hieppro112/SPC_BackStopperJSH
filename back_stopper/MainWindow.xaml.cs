@@ -408,7 +408,7 @@ namespace back_stopper
                 lastPos = now;
             }
         }
-        private async Task MoveToAsync(double pos)
+        private async Task MoveToAsync(double pos,double? speedS=null)
         {
             if (!serialPort.IsOpen)
                 return;
@@ -421,6 +421,7 @@ namespace back_stopper
 
             try
             {
+                speedS = (speedS!=null)?speedS:speed_servo;
                 Log("Current = " + curren_postion);
                 Log("Target = " + pos);
 
@@ -441,7 +442,7 @@ namespace back_stopper
 
                 // SPEED
                 //SendCommand("S=" + Math.Abs(speed_port));
-                SendCommand("S=" + speed_servo);
+                SendCommand("S=" + speedS);
 
                 await Task.Delay(50);
 
@@ -469,7 +470,7 @@ namespace back_stopper
         }
 
 
-        private async Task RestartPortAsync(double? i = null)
+        private async Task RestartPortAsync(double? i = null, bool index_min = false)
         {
             Log("isrestarting: "+isRestarting);
             if (isRestarting)
@@ -482,6 +483,10 @@ namespace back_stopper
                 Log("RESTART PORT");
                 //await MoveServoAsync(tdGoc,100,100,50);
                 await MoveToAsync(i==null?tdGoc:i??0.0);
+                if(index_min == false)
+                {
+                    await MoveToAsync(lm_max,20);
+                }
             }
             finally
             {
@@ -492,9 +497,9 @@ namespace back_stopper
         private async Task NextPortAsync()
         {
             int pos =
-                Convert.ToInt32(curren_postion + Post_Master) + 2000;
+                Convert.ToInt32(curren_postion + Post_Master) + 50000;
             await MoveToAsync(pos);
-            await MoveToAsync(pos - 2000);
+            //await MoveToAsync(pos - 2000);
 
             //int pos =
             //   Convert.ToInt32(curren_postion + 1);
@@ -541,7 +546,7 @@ namespace back_stopper
         private async void ReadInputLoop(CancellationToken token)
         {
 
-            bool isCheckStopHome = false;
+            bool isCheckStopHome = true;
             bool isCheckStopMin = false;
             bool isCheckStopMax = false;
 
@@ -568,7 +573,7 @@ namespace back_stopper
                     {
                         if (sensorOn)
                         {
-                            btn_start.IsEnabled = false;
+                            //btn_start.IsEnabled = false;
                             btn_Stop.IsEnabled = false;
                             if (!serialPort.IsOpen) return;
                             if (isCheckStopMin == false)
@@ -613,13 +618,14 @@ namespace back_stopper
                         if (sensorOn)
                         {
                             btn_start.IsEnabled = false;
-                            btn_Stop.IsEnabled = false;
+                            //btn_Stop.IsEnabled = false;
                             if (!serialPort.IsOpen) return;
                             if (isCheckStopMax == false)
                             {
                                 AlarmSound.PlayAlarmMax();
                                 BlinkLabel("OVER LIMIT !!!", txt_status_servo);
                                 StopPort();
+
                                 //xuly_chamvat(-99999);
 
                                 isCheckStopMax = true;
@@ -685,9 +691,9 @@ namespace back_stopper
           
         private void StopReadInput()
         {
-            cts.Cancel();
+            //cts.Cancel();
             //serialPort?.Close();
-            cdio.Exit(m_Id);
+            //cdio.Exit(m_Id);
         }
 
         private async void xuly_chamvat(double indexTo)
@@ -710,6 +716,12 @@ namespace back_stopper
         #endregion
 
         #region Event View
+
+        
+
+
+
+
         private async void BlinkLabel(string text, TextBlock  txt)
         {
             var originalColor = txt.Foreground; // Lưu màu gốc
@@ -729,43 +741,68 @@ namespace back_stopper
             }
         }
 
+
+        double D = 0.0;
+        double L = 0.0;
+        double airHole = 0.0;
         private async void txt_po_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                string po = txt_po.Text;
-                productData product = Sql.GetProductInfo(po);
-                if (product != null)
+                var dialogConfirm = new ConfirmDialog(
+                    message: "Bạn có chắc muốn chạy lệnh này?",
+                    title: "Xác nhận",
+                    type: DialogType.Confirm
+                    );
+                dialogConfirm.Owner = this;
+                dialogConfirm.ShowDialog();
+                //if (MessageBox.Show("Bắt đầu chạy hàng ?", "Xác nhận thông tin", MessageBoxButton.YesNo,MessageBoxImage.Question) == MessageBoxResult.Yes )
+                if (dialogConfirm.IsConfirmed)
                 {
-                    double D = 0.0;
-                    double L = 0.0;
-                    double airHole = 0.0;
+                    string po = txt_po.Text;
+                    productData product = Sql.GetProductInfo(po);
+                    if (product != null)
+                    { 
+                        txt_id.Text = product.Aufnr;
+                        txt_PSTX.Text = product.Pstx;
+                        txt_gamng.Text = product.Gamng.ToString();
+                        txt_l.Text = product.C_L.ToString();
+                        txt_d.Text = product.C_D.ToString();
+                        txt_airhole.Text = product.airhole.ToString();
+                        int.TryParse((((product.airhole ?? 0) + (product.C_D ?? 0) * (product.C_L ?? 0)) * 10).ToString(), out int n);
+                        //txt_target_position.Text = n.ToString();
 
-                    txt_id.Text = product.Aufnr;
-                    txt_PSTX.Text = product.Pstx;
-                    txt_gamng.Text = product.Gamng.ToString();
-                    txt_l.Text = product.C_L.ToString();
-                    txt_d.Text = product.C_D.ToString();
-                    txt_airhole.Text = product.airhole.ToString();
-                     int.TryParse((((product.airhole ?? 0) + (product.C_D ?? 0) * (product.C_L ?? 0)) * 10).ToString(),out int n);
-                    //txt_target_position.Text = n.ToString();
+                        bool checkData = D == product.C_D && L == product.C_L && airHole == product.airhole;
 
-                    bool checkData = D == product.C_D && L == product.C_L && airHole == product.airhole;
+                        if (!checkData)
+                        {
+                            //bool checkIndex_ss = txt_ss1.Text.Contains("ON");
+                            //if (checkIndex_ss == true)
+                            //{
+                            //    RestartPortAsync(lm_max);
+                            //    await MoveToAsync(n + 10000 + 2000);
+                            //    await MoveToAsync(n + 10000 - 2000);
+                            //}
+                            //else
+                            //{
+                            //    RestartPortAsync(lm_min);
+                            //    await MoveToAsync(n + 10000 + 2000);
+                            //    await MoveToAsync(n + 10000 - 2000);
+                            //}
+                            await MoveToAsync(n + 10000 + 2000);
+                            await MoveToAsync(n + 10000 - 2000,20);
+                        }
+                        else
+                        {
+                            Log("Data trung voi data truoc khong can chay",LogType.Success);
+                        }
 
-                    if (!checkData)
-                    {
-                        await MoveToAsync(n + 10000);
+                        D = product.C_D ?? 0;
+                        L = product.C_L ?? 0;
+                        airHole = product.airhole ?? 0;
+
+
                     }
-                    else
-                    {
-                        Log("Data trung voi data truoc khong can chay");
-                    }
-
-                    D = product.C_D??0;
-                    L = product.C_L??0;
-                    airHole = product.airhole??0;
-
-
                 }
             }
         }
@@ -774,10 +811,11 @@ namespace back_stopper
         {
             if (e.Key == Key.Enter)
             {
+
                 string idEmployee = txt_id_employee.Text.Trim();
                 EmployeeData employee = Sql.GetEmployee(idEmployee);
 
-                if (employee!=null)
+                if (employee != null)
                 {
                     Console.WriteLine(employee.name);
                     lb_check_emplyee.Text = "OK";
@@ -800,6 +838,7 @@ namespace back_stopper
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#DC2626"));
                     BlinkLabel("NO!", lb_check_emplyee);
+
                 }
             }
         }
@@ -836,12 +875,34 @@ namespace back_stopper
             //}
             //else
             //{
-                RestartPortAsync(2000);
+            //RestartPortAsync(2000);
             //}
+
+
+            bool checkIndex_ss = txt_ss1.Text.Contains("ON");
+            if (checkIndex_ss == true)
+            {
+                RestartPortAsync(lm_max);
+            }
+            else
+            {
+                RestartPortAsync(lm_min);
+            }
         }
 
-        private void MetroWindow_Closed(object sender, EventArgs e)
+        private async void MetroWindow_Closed(object sender, EventArgs e)
         {
+            //StopPort();
+            bool checkIndex_ss = txt_ss1.Text.Contains("ON");
+            if (checkIndex_ss == true)
+            {
+                RestartPortAsync(lm_max);
+            }
+            else
+            {
+                RestartPortAsync(lm_min);
+            }
+
             StopReadInput();
         }
 
@@ -855,16 +916,32 @@ namespace back_stopper
             txt_l.Text = "";
             txt_d.Text = "";
             txt_airhole.Text = "";
+            D = 0;
+            L = 0;
+            airHole = 0;
             //RestartPort();
             bool checkIndex_ss = txt_ss1.Text.Contains("ON");
             if (checkIndex_ss == true)
             {
-                RestartPortAsync(lm_max);
+                RestartPortAsync(lm_max, true);
             }
             else
             {
                 RestartPortAsync(lm_min);
             }
+        }
+
+        private async Task restartPortAsync()
+        {
+            int pos =
+                Convert.ToInt32(curren_postion + Post_Master) + 2000;
+            await MoveToAsync(pos);
+            await MoveToAsync(pos - 2000);
+
+            //int pos =
+            //   Convert.ToInt32(curren_postion + 1);
+            //await MoveToAsync(pos);
+
         }
 
         #endregion
