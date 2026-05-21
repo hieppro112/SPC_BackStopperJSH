@@ -18,7 +18,6 @@
     Closed="MetroWindow_Closed" WindowState="Maximized">
 
     <Window.Resources>
-
         <!-- BUTTON -->
         <Style x:Key="RoundBtn" TargetType="Button">
             <Setter Property="Height" Value="42"/>
