@@ -26,3 +26,8 @@ packages/
 
 # Mac
 .DS_Store
+**/*_wpftmp.csproj
+ 
+
+ 
+ 

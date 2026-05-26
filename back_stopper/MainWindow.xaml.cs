@@ -4,6 +4,7 @@ using CdioCs;
 using MahApps.Metro.Controls;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,7 @@ using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
@@ -27,13 +29,11 @@ namespace back_stopper
     /// </summary>
     public partial class MainWindow : MetroWindow
     {
-
+        //gia tri goc moi khi set 
+        public int? Set_origin_number = null;
         //gioi han khong cho servo chay ra khoi 
         int lm_min = -50000;
         int lm_max = 41000;
-
-
-
         //doc khong bi nhanh hon 
         private TaskCompletionSource<double> positionTcs;
 
@@ -55,10 +55,6 @@ namespace back_stopper
         // Biến lưu ID phiên làm việc với thiết bị
         private short m_Id;
 
-        // Biến lưu trạng thái hiện tại của Output (0 = OFF, 1 = ON)
-        private byte stateOut0 = 0;
-        private byte stateOut1 = 0;
-
         //bien doi tuong realtime 
         private CancellationTokenSource cts;
         private Task ioTask;
@@ -66,15 +62,17 @@ namespace back_stopper
         //toa do goc 
         int tdGoc = 0;
         //config ss control speed servo 
-        int speed_servo = 100;
+        int speed_servo = 50;
         int accel_servo = 50;
         int decel_servo = 100;
-        
+        double prev_post;
+        private string namePort = "";
+
 
         SerialPort serialPort = new SerialPort();
         int Post_Master = 1000;
-        double speed_port = 100;
         double curren_postion = 0;
+        double currenLoaded = 0;
         public MainWindow()
         {
             InitializeComponent();
@@ -84,24 +82,60 @@ namespace back_stopper
             Console.WriteLine("run programer");
             configPort();
             ConnectContec();
+            int.TryParse(num_step.Value.ToString(),out int n);
+            Post_Master = n;
 
             //connectPort(namePort_main);
         }
 
 
         #region Xy ly port
+
+        private string GetServoPortFromConfig()
+        {
+            string configPath = @"C:\BackStopper_config\config.txt";
+
+            try
+            {
+                // Kiểm tra file có tồn tại không
+                if (!File.Exists(configPath))
+                {
+                    MessageBox.Show($"Không tìm thấy file config tại: {configPath}");
+                    return null;
+                }
+
+                // Đọc tất cả các dòng trong file
+                string[] lines = File.ReadAllLines(configPath);
+
+                // Tìm dòng bắt đầu bằng "Name_Servo:"
+                foreach (string line in lines)
+                {
+                    if (line.StartsWith("Name_Servo:"))
+                    {
+                        // Lấy phần sau dấu :
+                        //string port = line.Substring("Name_Servo:".Length);
+                        //return port.Trim(); // Trim để xóa khoảng trắng
+
+
+                        string port = line.Split(':')[1];
+                        return port;
+                    }
+                }
+
+                // Không tìm thấy dòng Name_Servo
+                MessageBox.Show("Không tìm thấy cấu hình Name_Servo trong file config");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi đọc file config: {ex.Message}");
+                return null;
+            }
+        }
         private double postision_temp = 0;
         private void configPort()
         {
             //cmbPort.Items.Add(SerialPort.GetPortNames());
-
-            foreach (var item in SerialPort.GetPortNames())
-            {
-                cmbPort.Items.Add(item);
-            }
-
-            if (cmbPort.Items.Count > 0)
-                cmbPort.SelectedIndex = 0;
 
             // Serial config
             serialPort.BaudRate = 38400;
@@ -124,11 +158,10 @@ namespace back_stopper
                     serialPort.Open();
                     SendCommand("?96");
                     txt_status_servo.Text = "Ready";
-
+                    btn_fab.Visibility = Visibility.Visible;
                     txt_status_servo.Foreground =
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
-                    Log("Connected");
 
                     // Reset communication state
                     SendCommand("ECHO=0");
@@ -156,11 +189,9 @@ namespace back_stopper
                     
                     // Quan trọng: chuyển về velocity mode
                     SendCommand("V=0");
+                    border_control.IsEnabled = true;
                     await Task.Delay(50);
-
-                    border_main.IsEnabled = true;
-                    txt_po.Focus();
-                    Log("Motor initialized");
+                    Log("Mortor OK",LogType.Success);
                 }
                 else
                 {
@@ -172,7 +203,8 @@ namespace back_stopper
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#DC2626"));
                     border_main.IsEnabled = false;
-
+                    btn_fab.Visibility = Visibility.Hidden;
+                    border_control.IsEnabled = false;
                     Log("Disconnected");
                 }
             }
@@ -186,29 +218,6 @@ namespace back_stopper
                 Log("Lỗi connect port: "+ex.Message);
             }
         }
-
-        private void Log2(string msg)
-        {
-            //Console.WriteLine("log: "+msg + Environment.NewLine);
-
-            string logText =
-               $"[{DateTime.Now:HH:mm:ss}] {msg}";
-
-            Console.WriteLine(logText);
-
-            Dispatcher.Invoke(() =>
-            {
-                list_log.Items.Insert(0, logText);
-
-                        // giới hạn 200 log
-                        if (list_log.Items.Count > 200)
-                {
-                    list_log.Items.RemoveAt(
-                        list_log.Items.Count - 1);
-                }
-            });
-        }
-
 
         private void Log(string msg,
                  LogType type = LogType.Info)
@@ -267,10 +276,6 @@ namespace back_stopper
 
         private void SendCommand(string cmd)
         {
-            //if (serialPort.IsOpen)
-            //{
-            //    serialPort.Write(cmd + "\r\n");
-            //}
 
             lock (serialLock)
             {
@@ -285,28 +290,6 @@ namespace back_stopper
 
         //bien xu ly bi tach chuoi data
         private string serialBuffer = "";
-        //chay khi SenCommand duoc goi 
-        //    private void SerialPort_DataReceived(
-        //object sender,
-        //SerialDataReceivedEventArgs e)
-        //    {
-        //        try
-        //        {
-        //            string data = serialPort.ReadExisting() ?? "";
-
-        //            Dispatcher.Invoke(() =>
-        //            {
-        //                //Log("RX: " + data +" end ");
-        //                Log("status: " + data + " end ");
-
-        //                ParsePosition(data);
-        //            });
-        //        }
-        //        catch(Exception ex)
-        //        {
-        //            Log("loi ket noi: "+ex.Message);
-        //        }
-        //    }
 
         private void SerialPort_DataReceived(
     object sender,
@@ -341,18 +324,41 @@ namespace back_stopper
                         Regex.Match(
                             line,
                             @"Px\.\d+=(-?\d+)");
+                    // chỉ xử lý position
+                    Match matchLoad =
+                        Regex.Match(
+                            line,
+                           @"Ix\.1=(\d+)");
+
 
                     if (match.Success)
                     {
                         curren_postion =
                             int.Parse(
                                 match.Groups[1].Value);
+                        //if (curren_postion >= Set_origin_number)
+                        //{
+                        //    StopPort();
+                        //}
                         Console.WriteLine("cr po: "+curren_postion);
                         Dispatcher.BeginInvoke(
                             new Action(() =>
                             {
                                 Log("POSITION => " +
                             curren_postion);
+                            }));
+                    }
+                    if (matchLoad.Success)
+                    {
+                        currenLoaded =
+                            int.Parse(
+                                matchLoad.Groups[1].Value);
+                        Console.WriteLine("loaded: " + currenLoaded);
+                        Dispatcher.BeginInvoke(
+                            new Action(() =>
+                            {
+                                Log("Loaded => " +
+                            currenLoaded);
                             }));
                     }
                 }
@@ -366,14 +372,14 @@ namespace back_stopper
         #endregion
 
         #region control sensor
-        private void ParsePosition(string data)
-        {
-            Match match = Regex.Match(data, @"Px\.\d+=(-?\d+)");
-            if (match.Success)
-            {
-                curren_postion = int.Parse(match.Groups[1].Value);
-            }
-        }
+        //private void ParsePosition(string data)
+        //{
+        //    Match match = Regex.Match(data, @"Px\.\d+=(-?\d+)");
+        //    if (match.Success)
+        //    {
+        //        curren_postion = int.Parse(match.Groups[1].Value);
+        //    }
+        //}
        
         private void StopPort()
         {
@@ -387,17 +393,31 @@ namespace back_stopper
         private async Task WaitServoStop()
         {
             double lastPos = -999999;
-
             while (true)
             {
                 // yêu cầu position mới
                 SendCommand("?96");
+                //lấy tải trọng 
+                SendCommand("?79");
+                SendCommand("?98");
 
                 await Task.Delay(100);
 
                 double now = curren_postion;
 
                 Log("CURRENT POS = " + now);
+
+                if (now > Set_origin_number && Set_origin_number != null)
+                {
+                    StopPort();
+                    btn_start.IsEnabled = false;
+                    Log("STOP — đã đạt origin: " + Set_origin_number, LogType.Warning);
+                    break;
+                }
+                else
+                {
+                    btn_start.IsEnabled = true;
+                }
 
                 // position gần như đứng yên
                 if (Math.Abs(now - lastPos) < 1)
@@ -406,7 +426,10 @@ namespace back_stopper
                 }
 
                 lastPos = now;
+               
             }
+
+            
         }
         private async Task MoveToAsync(double pos,double? speedS=null)
         {
@@ -418,6 +441,7 @@ namespace back_stopper
                 return;
 
             isMoving = true;
+
 
             try
             {
@@ -435,7 +459,7 @@ namespace back_stopper
 
                 await Task.Delay(50);
 
-                // deceleration
+                //deceleration
                 SendCommand("D=" + decel_servo);
 
                 await Task.Delay(50);
@@ -480,31 +504,30 @@ namespace back_stopper
 
             try
             {
+
+                StartBlinkServoPanel();
                 Log("RESTART PORT");
                 //await MoveServoAsync(tdGoc,100,100,50);
                 await MoveToAsync(i==null?tdGoc:i??0.0);
                 if(index_min == false)
                 {
-                    await MoveToAsync(lm_max,20);
+                    await MoveToAsync(Set_origin_number??lm_max,20);
                 }
             }
             finally
             {
                 isRestarting = false;
+                StopBlinkServoPanel();
             }
         }
 
         private async Task NextPortAsync()
         {
             int pos =
-                Convert.ToInt32(curren_postion + Post_Master) + 50000;
+                Convert.ToInt32(curren_postion + Post_Master);
+            Log("next: " + Post_Master);
             await MoveToAsync(pos);
             //await MoveToAsync(pos - 2000);
-
-            //int pos =
-            //   Convert.ToInt32(curren_postion + 1);
-            //await MoveToAsync(pos);
-
         }
 
         private async Task PrevPortAsync()
@@ -562,6 +585,8 @@ namespace back_stopper
                 int ret = cdio.InpBit(m_Id, 0, out in0);
                 int ret1 = cdio.InpBit(m_Id, 1, out in2);
                 int ret2 = cdio.InpBit(m_Id, 2, out in1);
+                
+               
 
 
                 //lay trang thai input 0
@@ -573,12 +598,10 @@ namespace back_stopper
                     {
                         if (sensorOn)
                         {
-                            //btn_start.IsEnabled = false;
-                            btn_Stop.IsEnabled = false;
                             if (!serialPort.IsOpen) return;
+                            
                             if (isCheckStopMin == false)
                             {
-                                AlarmSound.PlayAlarm();
                                 BlinkLabel("OVER LIMIT !!!", txt_status_servo);
                                 StopPort();
                                 isCheckStopMin = true;
@@ -588,23 +611,22 @@ namespace back_stopper
                         }
                         else
                         {
-                            btn_start.IsEnabled = true;
-                            btn_Stop.IsEnabled = true;
                             isCheckStopMin = false;
-                            AlarmSound.Stop();
                         }
+                        //double index_origin_into_target = ((Set_origin_number??0 - curren_postion) / 500.0);
+
+                        txt_current_position.Text = curren_postion.ToString()
+                            + $"  ({((Set_origin_number - curren_postion) / 500)-5:F2}mm)";
+
+                        //Console.WriteLine($"origin={Set_origin_number}  current={curren_postion}  diff={Set_origin_number - curren_postion}");
                         
+                        txt_trongTai.Text = currenLoaded.ToString();
+                        txt_status_servo.Text = currenLoaded.ToString();
+
                         txt_ss1.Text = sensorOn ? "ON" : "OFF";
                         txt_ss1.Foreground = new SolidColorBrush(
                             (Color)ColorConverter.ConvertFromString(sensorOn ? "#16A34A" : "#DC2626")
                             );
-
-                       
-
-                        txt_current_position.Text = curren_postion.ToString();
-
-                        btn_start.IsEnabled = sensorOn ? false : true;
-                        btn_Stop.IsEnabled = sensorOn ? false : true;
                     }));
                 }
                 
@@ -615,16 +637,13 @@ namespace back_stopper
 
                     _ = Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        if (sensorOn)
-                        {
-                            btn_start.IsEnabled = false;
-                            //btn_Stop.IsEnabled = false;
+                        if (sensorOn) 
+                        { 
                             if (!serialPort.IsOpen) return;
                             if (isCheckStopMax == false)
-                            {
-                                AlarmSound.PlayAlarmMax();
+                            { 
                                 BlinkLabel("OVER LIMIT !!!", txt_status_servo);
-                                StopPort();
+                                //StopPort();
 
                                 //xuly_chamvat(-99999);
 
@@ -633,21 +652,13 @@ namespace back_stopper
                         }
                         else
                         {
-                            btn_start.IsEnabled = true;
-                            btn_Stop.IsEnabled = true;
                             isCheckStopMax = false;
-                            AlarmSound.StopMax();
                         }
 
                         txt_ss2.Text = sensorOn ? "ON" : "OFF";
                         txt_ss2.Foreground = new SolidColorBrush(
                             (Color)ColorConverter.ConvertFromString(sensorOn ? "#16A34A" : "#DC2626")
                             );
-
-                        txt_current_position.Text = curren_postion.ToString();
-
-                        btn_start.IsEnabled = sensorOn ? false : true;
-                        btn_Stop.IsEnabled = sensorOn ? false : true;
                     }));
                 }
                 await Task.Delay(50);
@@ -664,7 +675,7 @@ namespace back_stopper
                             BlinkLabel("INDEX HOME", txt_status_servo);
                             if (isCheckStopHome==false)
                             {
-                                StopPort();
+                                //StopPort();
                                 isCheckStopHome = true;
                             }
                             //xuly_chamvat();
@@ -678,14 +689,31 @@ namespace back_stopper
                         txt_ss3.Foreground = new SolidColorBrush(
                             (Color)ColorConverter.ConvertFromString(sensorOn ? "#16A34A" : "#DC2626")
                             );
-
-                        
-                        txt_target_position.Text = isCheckStopHome.ToString();
+                    }));
+                }
+                await Task.Delay(50);
+                if (in0 == 0 || in1 == 0)
+                {
+                   
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        AlarmSound.PlayAlarm();
+                        BlinkLabel("OVER LIMT !!!", txt_notify);
+                        _ = (in0 == 1)?
+                        btn_start.IsEnabled = false:
+                        btn_Stop.IsEnabled = false;
+                    }));
+                }
+                else
+                {
+                    
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        AlarmSound.Stop();
                         btn_start.IsEnabled = true;
                         btn_Stop.IsEnabled = true;
                     }));
                 }
-                await Task.Delay(50);
             }
         }
           
@@ -716,17 +744,57 @@ namespace back_stopper
         #endregion
 
         #region Event View
+        //ham tao hieu ung mau nhap nhay khi servo di chuyen 
+        private void StartBlinkServoPanel()
+        {
+            btn_fab.IsEnabled = false;
+            btn_po_restart.IsEnabled = false;
+            txt_po.IsEnabled = false;
+            BlinkLabel("CẢNH BÁO NGUY HIỂM",txt_notify);
+            ColorAnimation animation =
+                new ColorAnimation
+                {
+                    From = Colors.Red,
+                    To = Colors.White,
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever
+                };
 
-        
+            SolidColorBrush brush =
+                new SolidColorBrush(Colors.Red);
 
+            border_control.Background = brush;
+            border_main.Background = brush;
+            border_employee.Background = brush;
 
+            brush.BeginAnimation(
+                SolidColorBrush.ColorProperty,
+                animation);
+        }
+
+        private void StopBlinkServoPanel()
+        {
+            SolidColorBrush brush =
+                new SolidColorBrush(Colors.White);
+
+            border_control.Background = brush;
+            border_main.Background = brush;
+            border_employee.Background = brush;
+
+            btn_fab.IsEnabled = true;
+            btn_po_restart.IsEnabled = true;
+            txt_po.IsEnabled = true;
+
+            BlinkLabel("-", txt_notify);
+        }
 
 
         private async void BlinkLabel(string text, TextBlock  txt)
         {
             var originalColor = txt.Foreground; // Lưu màu gốc
             var blinkColor = new SolidColorBrush(Colors.Red);
-
+            
             for (int i = 0; i < 6; i++) // 3s với 0.5s mỗi lần = 6 lần đổi màu
             {
                 // Đổi sang đỏ
@@ -736,9 +804,9 @@ namespace back_stopper
                 // Đổi về màu gốc
                 txt.Foreground = originalColor;
                 await Task.Delay(250); // Chờ 0.25s
-
-                txt.Text = text;
             }
+            txt.Text = text;
+            txt.Foreground = originalColor;
         }
 
 
@@ -759,6 +827,7 @@ namespace back_stopper
                 //if (MessageBox.Show("Bắt đầu chạy hàng ?", "Xác nhận thông tin", MessageBoxButton.YesNo,MessageBoxImage.Question) == MessageBoxResult.Yes )
                 if (dialogConfirm.IsConfirmed)
                 {
+                    double startPos = curren_postion;
                     string po = txt_po.Text;
                     productData product = Sql.GetProductInfo(po);
                     if (product != null)
@@ -769,28 +838,54 @@ namespace back_stopper
                         txt_l.Text = product.C_L.ToString();
                         txt_d.Text = product.C_D.ToString();
                         txt_airhole.Text = product.airhole.ToString();
-                        int.TryParse((((product.airhole ?? 0) + (product.C_D ?? 0) * (product.C_L ?? 0)) * 10).ToString(), out int n);
-                        //txt_target_position.Text = n.ToString();
+                        double airhole = product.airhole ?? 0;
+                        int n = Convert.ToInt32(Set_origin_number- 2500 - (airhole * 1000 / 2.0 ));
+                        Console.WriteLine("check data :"+Set_origin_number +" - "+ product.airhole+" - "+n  );
 
-                        bool checkData = D == product.C_D && L == product.C_L && airHole == product.airhole;
+                        bool checkData = /*D == product.C_D && L == product.C_L &&*/ airHole == product.airhole;
 
                         if (!checkData)
                         {
-                            //bool checkIndex_ss = txt_ss1.Text.Contains("ON");
-                            //if (checkIndex_ss == true)
+                            double step_backblask = 4000;
+                            double step_value = n-3;
+                            StartBlinkServoPanel();
+                            // if (n <= curren_postion)
                             //{
-                            //    RestartPortAsync(lm_max);
-                            //    await MoveToAsync(n + 10000 + 2000);
-                            //    await MoveToAsync(n + 10000 - 2000);
+                            //Console.WriteLine("check post: " + curren_postion + " " + prev_post);
+                            //if (prev_post < curren_postion)
+                            //{
+                            //await MoveToAsync(n - step_backblask);
+                            //await MoveToAsync(step_value, 20);
                             //}
                             //else
                             //{
-                            //    RestartPortAsync(lm_min);
-                            //    await MoveToAsync(n + 10000 + 2000);
-                            //    await MoveToAsync(n + 10000 - 2000);
+                            //    await MoveToAsync(n);
                             //}
-                            await MoveToAsync(n + 10000 + 2000);
-                            await MoveToAsync(n + 10000 - 2000,20);
+                            //}
+                            //else if (n > curren_postion)
+                            //{
+                            //Console.WriteLine("check post: " + curren_postion + " " + prev_post);
+                            //if (prev_post > curren_postion)
+                            //{
+                            //await MoveToAsync(n + step_backblask);
+                            //await MoveToAsync(step_value, 20);
+                            //}
+                            //else
+                            //{
+                            //    await MoveToAsync(n);
+                            //}
+
+                            //}
+
+
+
+
+                            await MoveToAsync(n + 2000);
+                            await MoveToAsync(n, 20);
+                            //await MoveToAsync(n);
+
+                            prev_post = startPos;
+                            StopBlinkServoPanel();
                         }
                         else
                         {
@@ -800,8 +895,21 @@ namespace back_stopper
                         D = product.C_D ?? 0;
                         L = product.C_L ?? 0;
                         airHole = product.airhole ?? 0;
+                    }
+                    //khong có data
+                    else
+                    {
+                        border_txt_po.BorderBrush =
+                            new SolidColorBrush(Colors.Red);
 
+                        border_txt_po.Background =
+                            new SolidColorBrush(
+                                (Color)ColorConverter.ConvertFromString("#FEF2F2"));
 
+                        TextBoxHelper.SetWatermark(
+                            txt_po,"PO NOT FOUND !!!");
+                        txt_po.Clear();
+                        txt_po.Focus();
                     }
                 }
             }
@@ -827,6 +935,11 @@ namespace back_stopper
                     lb_check_emplyee.Foreground =
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
+                    namePort = GetServoPortFromConfig();
+                    Task.Delay(500);
+                    connectPort(namePort);
+
+                    txt_notify.Text = "Bạn hãy set gốc trước khi thao tác !!";
                 }
                 else
                 {
@@ -838,56 +951,54 @@ namespace back_stopper
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#DC2626"));
                     BlinkLabel("NO!", lb_check_emplyee);
-
                 }
             }
-        }
-
-        private void cmbPort_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            Task.Delay(500);
-            int index = cmbPort.SelectedIndex;
-            connectPort(cmbPort.Items.GetItemAt(index).ToString());
         }
 
         private async void btn_start_Click(object sender, RoutedEventArgs e)
         {
             //NextPort();
+            D = 0;
+            L = 0;
+            airHole = 0;
             await NextPortAsync();
-            txt_current_position.Text = curren_postion.ToString();
+            //txt_current_position.Text = curren_postion.ToString();
         }
 
         private async void btn_Stop_Click(object sender, RoutedEventArgs e)
         {
             //PrevpPort();
-             await PrevPortAsync();
+            D = 0;
+            L = 0;
+            airHole = 0;
+            await PrevPortAsync();
         }
 
         private void btn_restart_Click(object sender, RoutedEventArgs e)
         {
-            //RestartPort();
-            //cho nop
-
             //bool checkIndex_ss = txt_ss1.Text.Contains("ON");
-            //if (checkIndex_ss ==true)
+            //if (checkIndex_ss == true)
             //{
             //    RestartPortAsync(lm_max);
             //}
             //else
             //{
-            //RestartPortAsync(2000);
+            //    RestartPortAsync(lm_min);
             //}
 
+            list_log.Items.Clear();
 
-            bool checkIndex_ss = txt_ss1.Text.Contains("ON");
-            if (checkIndex_ss == true)
-            {
-                RestartPortAsync(lm_max);
-            }
-            else
-            {
-                RestartPortAsync(lm_min);
-            }
+            txt_po.Clear();
+            txt_po.Focus();
+            txt_id.Text = "";
+            txt_PSTX.Text = "";
+            txt_gamng.Text = "";
+            txt_l.Text = "";
+            txt_d.Text = "";
+            txt_airhole.Text = "";
+            //D = 0;
+            //L = 0;
+            //airHole = 0;
         }
 
         private async void MetroWindow_Closed(object sender, EventArgs e)
@@ -923,7 +1034,7 @@ namespace back_stopper
             bool checkIndex_ss = txt_ss1.Text.Contains("ON");
             if (checkIndex_ss == true)
             {
-                RestartPortAsync(lm_max, true);
+                RestartPortAsync(Set_origin_number, true);
             }
             else
             {
@@ -931,20 +1042,71 @@ namespace back_stopper
             }
         }
 
-        private async Task restartPortAsync()
-        {
-            int pos =
-                Convert.ToInt32(curren_postion + Post_Master) + 2000;
-            await MoveToAsync(pos);
-            await MoveToAsync(pos - 2000);
+        //private async Task restartPortAsync()
+        //{
+        //    int pos =
+        //        Convert.ToInt32(curren_postion + Post_Master) + 2000;
+        //    await MoveToAsync(pos);
+        //    await MoveToAsync(pos - 2000);
 
-            //int pos =
-            //   Convert.ToInt32(curren_postion + 1);
-            //await MoveToAsync(pos);
+        //    //int pos =
+        //    //   Convert.ToInt32(curren_postion + 1);
+        //    //await MoveToAsync(pos);
 
-        }
+        //}
 
         #endregion
 
+        private void num_step_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double?> e)
+        {
+            //int.TryParse(num_step.Value.ToString(), out int n);
+            //Post_Master = n;
+
+            int step = (int)(num_step.Value ?? 1000);
+            Post_Master = step;
+            if (txt_step_display != null)
+            {
+                double sw_mm = step / 500.0;
+                txt_step_display.Text = step.ToString() +" - "+ sw_mm.ToString() + "mm";
+            }
+        }
+
+        private void btn_fab_Click(object sender, RoutedEventArgs e)
+        {
+            //popup_jog.IsOpen = !popup_jog.IsOpen;
+            // Nếu popup đang mở → đóng luôn không cần hỏi mật khẩu
+            if (popup_jog.IsOpen)
+            {
+                popup_jog.IsOpen = false;
+                return;
+            }
+
+            // Popup đang đóng → hỏi mật khẩu trước
+            var dialog = new PasswordDialog();
+            dialog.Owner = this;
+            dialog.ShowDialog();
+
+            if (dialog.IsConfirmed)
+            {
+                popup_jog.IsOpen = true;
+            }
+
+        }
+
+        private void btn_stop_main_Click(object sender, RoutedEventArgs e)
+        {
+            StopPort();
+        }
+
+        private void btn_set_origin_Click(object sender, RoutedEventArgs e)
+        {
+            Set_origin_number = Convert.ToInt32(curren_postion);
+            Log("get origin: "+Set_origin_number);
+            txt_origin_pos.Text = Set_origin_number.ToString();
+            if (txt_origin_pos.Text != "-")
+            {
+                border_main.IsEnabled = true;
+            }
+        }
     }
 }
