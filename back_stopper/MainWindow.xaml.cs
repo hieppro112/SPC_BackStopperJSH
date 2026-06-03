@@ -31,10 +31,22 @@ namespace back_stopper
     /// </summary>
     public partial class MainWindow : MetroWindow
     {
+        //value stopper den origin 
+        private double value_stopper;
+        //man hinh nhan 2 tay 
+        private RunningDialog _runningDialog;
+        //type blink 
+        private BlinkSource _currentBlinkSource = BlinkSource.None;
+
+        private int _blinkCount = 0;
+        private readonly object _blinkLock = new object();
         //maneger sensor
         bool check_sst_0 = false;
         bool check_sst_1 = false;
-
+        int outRelay = 0;
+        byte stateRelay = 0;
+        byte status_touch = 0;
+        bool startBlink = true;
         //gia tri goc moi khi set 
         public int? Set_origin_number = null;
         //gioi han khong cho servo chay ra khoi 
@@ -42,15 +54,11 @@ namespace back_stopper
         int lm_max = 41000;
         //doc khong bi nhanh hon 
         private TaskCompletionSource<double> positionTcs;
-
-        private double targetPosition = 0;
         //bien dung lock khong cho cmd chay
         private readonly object serialLock = new object();
 
         private volatile bool isMoving = false;
         private volatile bool isRestarting = false;
-
-        private bool lastSensorState = false;
 
         //bien dung de pausse luong sensor
         private ManualResetEventSlim pauseEvent =
@@ -62,19 +70,22 @@ namespace back_stopper
         private short m_Id;
 
         //bien doi tuong realtime 
+        private CancellationTokenSource _blinkLabelCts;
         private CancellationTokenSource cts;
         private Task ioTask;
 
         //toa do goc 
         int tdGoc = 0;
         //config ss control speed servo 
-        int speed_servo = 100;
+        int speed_servo = 30;
         int accel_servo = 50;
-        int decel_servo = 0;
+        int decel_servo = 50;
         double prev_post;
         private string namePort = "";
 
+        bool check_pos_for_relay = false;
 
+        double pos_target = 0;
         SerialPort serialPort = new SerialPort();
         int Post_Master = 1000;
         double curren_postion = 50;
@@ -94,13 +105,49 @@ namespace back_stopper
             int.TryParse(num_step.Value.ToString(),out int n);
             Post_Master = n;
 
+            string s =  GetServoPortFromConfig("origin");
+            if (!string.IsNullOrWhiteSpace(s))
+            {
+                border_main.IsEnabled = true;
+                //btn_Stop.Background = new SolidColorBrush(
+                //        (Color)ColorConverter.ConvertFromString("#DC2626"));
+                //btn_restart.Background = new SolidColorBrush(
+                //        (Color)ColorConverter.ConvertFromString("#FFF50B4B"));
+                txt_origin_pos.Text = s;
+                int.TryParse(s, out int num);
+                Set_origin_number = num;
+                //luu vao file 
+                SaveOrigin(Set_origin_number ?? 0);
+            }
+
             //connectPort(namePort_main);
         }
 
 
         #region Xy ly port
 
-        private string GetServoPortFromConfig()
+        //set gia tri config
+        private void SaveOrigin(int originValue)
+        {
+            string path = @"C:\BackStopper_config\config.txt";
+
+            // đọc toàn bộ line
+            var lines = File.ReadAllLines(path).ToList();
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                // tìm dòng origin:
+                if (lines[i].StartsWith("origin:"))
+                {
+                    lines[i] = $"origin:{originValue}";
+                }
+            }
+
+            // ghi đè lại file
+            File.WriteAllLines(path, lines);
+        }
+        //lay gia tri config
+        private string GetServoPortFromConfig(String s_search)
         {
             string configPath = @"C:\BackStopper_config\config.txt";
 
@@ -119,20 +166,15 @@ namespace back_stopper
                 // Tìm dòng bắt đầu bằng "Name_Servo:"
                 foreach (string line in lines)
                 {
-                    if (line.StartsWith("Name_Servo:"))
+                    if (line.StartsWith($"{s_search}:"))
                     {
-                        // Lấy phần sau dấu :
-                        //string port = line.Substring("Name_Servo:".Length);
-                        //return port.Trim(); // Trim để xóa khoảng trắng
-
 
                         string port = line.Split(':')[1];
                         return port;
                     }
                 }
-
                 // Không tìm thấy dòng Name_Servo
-                MessageBox.Show("Không tìm thấy cấu hình Name_Servo trong file config");
+                MessageBox.Show($"Không tìm thấy cấu hình {s_search} trong file config");
                 return null;
             }
             catch (Exception ex)
@@ -200,7 +242,6 @@ namespace back_stopper
                     border_control.IsEnabled = true;
                     await Task.Delay(50);
                     Log("Mortor OK",LogType.Success);
-                    Log("Start connect contect",LogType.Success);
                     ConnectContec();
                 }
                 else
@@ -268,22 +309,22 @@ namespace back_stopper
 
             Console.WriteLine(logText);
 
-            Dispatcher.Invoke(() =>
-            {
-                list_log.Items.Insert(0,
-                    new LogItem
-                    {
-                        Message = logText,
-                        Color = color
-                    });
+            //Dispatcher.Invoke(() =>
+            //{
+            //    list_log.Items.Insert(0,
+            //        new LogItem
+            //        {
+            //            Message = logText,
+            //            Color = color
+            //        });
 
-                // limit log
-                if (list_log.Items.Count > 200)
-                {
-                    list_log.Items.RemoveAt(
-                        list_log.Items.Count - 1);
-                }
-            });
+            //    // limit log
+            //    if (list_log.Items.Count > 150)
+            //    {
+            //        list_log.Items.RemoveAt(
+            //            list_log.Items.Count - 1);
+            //    }
+            //});
         }
 
         private void SendCommand(string cmd)
@@ -295,8 +336,6 @@ namespace back_stopper
                     return;
 
                 serialPort.Write(cmd + "\r\n");
-
-                Log("SEND => " + cmd);
             }
         }
 
@@ -353,12 +392,12 @@ namespace back_stopper
                         //    StopPort();
                         //}
                         Console.WriteLine("cr po: "+curren_postion);
-                        Dispatcher.BeginInvoke(
-                            new Action(() =>
-                            {
-                                Log("POSITION => " +
-                            curren_postion);
-                            }));
+                        //Dispatcher.BeginInvoke(
+                        //    new Action(() =>
+                        //    {
+                        //        Log("POSITION => " +
+                        //    curren_postion);
+                        //    }));
                     }
                     if (matchLoad.Success)
                     {
@@ -366,12 +405,12 @@ namespace back_stopper
                             int.Parse(
                                 matchLoad.Groups[1].Value);
                         Console.WriteLine("loaded: " + currenLoaded);
-                        Dispatcher.BeginInvoke(
-                            new Action(() =>
-                            {
-                                Log("Loaded => " +
-                            currenLoaded);
-                            }));
+                        //Dispatcher.BeginInvoke(
+                        //    new Action(() =>
+                        //    {
+                        //        Log("Loaded => " +
+                        //    currenLoaded);
+                        //    }));
                     }
                 }
             }
@@ -409,18 +448,12 @@ namespace back_stopper
 
                 double now = curren_postion;
 
-                Log("CURRENT POS = " + now);
 
-                if (now > Set_origin_number && Set_origin_number != null)
+                if (now-5 > Set_origin_number && Set_origin_number != null)
                 {
-                    StopPort();
-                    btn_start.IsEnabled = false;
+                    //StopPort();
+                    //btn_start.IsEnabled = false;
                     Log("STOP — đã đạt origin: " + Set_origin_number, LogType.Error);
-                    break;
-                }
-                else
-                {
-                    btn_start.IsEnabled = true;
                 }
 
                 // position gần như đứng yên
@@ -448,7 +481,6 @@ namespace back_stopper
             try
             {
                 speedS = (speedS!=null)?speedS:speed_servo;
-                Log("Current = " + curren_postion);
                 Log("Target = " + pos);
 
                 // STOP
@@ -480,8 +512,6 @@ namespace back_stopper
                 // START MOVE
                 SendCommand("^");
 
-                Log($"MOVE => {pos}");
-
                 // đợi chạy xong
                 await WaitServoStop();
             }
@@ -492,6 +522,9 @@ namespace back_stopper
             finally
             {
                 isMoving = false;
+                //kiem tra dung vi tri chay chua 
+                check_pos_for_relay = (pos_target - curren_postion <= 5) && (pos_target - curren_postion >= 0);
+                Console.WriteLine("pos: " + pos_target + "curr pos " + curren_postion + "result: "+check_pos_for_relay);
             }
         }
 
@@ -506,18 +539,18 @@ namespace back_stopper
 
             try
             {
-                StartBlinkServoPanel();
-                Log("RESTART PORT");
+                StartBlinkServoPanel(LogType.Warning);
                 //await MoveServoAsync(tdGoc,100,100,50);
                 await MoveToAsync(i==null?tdGoc:i??0.0);
                 if(index_min == false)
                 {
-                    await MoveToAsync(Set_origin_number??lm_max,20);
+                    await MoveToAsync(Set_origin_number??lm_max,40);
                 }
             }
             finally
             {
                 isRestarting = false;
+                //StopBlinkLabel("-",txt_notify);
                 StopBlinkServoPanel();
             }
         }
@@ -526,7 +559,7 @@ namespace back_stopper
         {
             int pos =
                 Convert.ToInt32(curren_postion + Post_Master);
-            Log("next: " + Post_Master);
+            check_pos_for_relay = pos == pos_target;
             await MoveToAsync(pos);
             //await MoveToAsync(pos - 2000);
         }
@@ -535,7 +568,7 @@ namespace back_stopper
         {
             int pos =
                 Convert.ToInt32(curren_postion - Post_Master);
-
+            check_pos_for_relay = pos == pos_target;
             await MoveToAsync(pos);
         }
         #endregion
@@ -547,8 +580,9 @@ namespace back_stopper
         {
             try
             {
-                int ret = cdio.Init("DIO000", out m_Id);
 
+                string nameContect = GetServoPortFromConfig("Name_Contect");
+                int ret = cdio.Init($"{nameContect}", out m_Id);
                 if (ret == (int)CdioConst.DIO_ERR_SUCCESS)
                 {
                     cts = new CancellationTokenSource();
@@ -556,6 +590,21 @@ namespace back_stopper
                     txt_ss1.Foreground = new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
                     Log("Contec OK", LogType.Success);
+                    //lay speed servo config
+                    int.TryParse(GetServoPortFromConfig("speed_servo"), out int sp_sv);
+                    speed_servo = sp_sv;
+                    var dialogConfirm = new ConfirmDialog(
+                       message: "Bạn hãy Kiểm Tra gốc trước khi thao tác?",
+                       title: "Success",
+                       type: DialogType.Confirm);
+                    dialogConfirm.Owner = this;
+                    dialogConfirm.ShowDialog();
+
+                    if (dialogConfirm.IsConfirmed)
+                    {
+                        Event_fab();
+                        
+                    }
                 }
                 else
                 {
@@ -580,190 +629,469 @@ namespace back_stopper
         {
             cts = new CancellationTokenSource();
             //quet lien tuc 
-            ioTask = Task.Run(() => ReadInputLoop(cts.Token));
+            ioTask =  readinputloop(cts.Token);
         }
 
-        private async void ReadInputLoop(CancellationToken token)
-        {
 
-            bool isCheckStopHome = true;
-            bool isCheckStopMin = false;
-            bool isCheckStopMax = false;
+
+        //private async Task ReadInputLoop(CancellationToken token)
+        //{
+        //    bool isCheckStopMin = false;
+        //    bool isCheckStopMax = false;
+        //    bool isCheckStopHome = true;
+
+        //    bool checkON_emg = false;//kiem tra emg da thong bao chua 
+        //    bool checkON_tayNam = false;//kiem tra emg da thong bao chua 
+
+        //    //while (!token.IsCancellationRequested)
+        //    //{
+        //    //    pauseEvent.Wait();
+        //    //    cdio.InpBit(m_Id, 2, out byte inMin);//cong 2 min
+        //    //    cdio.InpBit(m_Id, 0, out byte inMax);//cong 0 max
+        //    //    cdio.InpBit(m_Id, 4, out byte in_taynam);//cong 4 tay gac 
+        //    //    cdio.InpBit(m_Id, 3, out byte in_drill_water);//cong 3 dril, nuoc
+        //    //    cdio.InpBit(m_Id, 5, out byte inEMG);//cong 5 nut Emergency
+
+        //    //    //doc trang thai relay điện
+        //    //    cdio.EchoBackByte(m_Id, 0, out byte state);
+        //    //    stateRelay = state;
+
+
+
+        //    //    Console.WriteLine("OUT cong 0: " + state);
+        //    //    Console.WriteLine("cong 5 nut : " + inEMG);
+        //    //    Console.WriteLine("cong :drill waater  " + in_drill_water);
+        //    //    Console.WriteLine("cong tay nam: " + in_taynam);
+
+
+        //    //    //relay dien on khi emergy =0, drill & water = 0 , đúng vị trí 
+        //    //    bool check_post = true;
+        //    //    outRelay = (inEMG == 0 && check_post) ? 1 : 0;
+        //    //    Event_relay();
+
+        //    //    ///ưu tiên cho nút dừng khẩn cấp
+        //    //    ///tiếp theo là tay cầm 
+        //    //    if (inEMG == 1)
+        //    //    {
+        //    //        await Dispatcher.BeginInvoke(new Action(() =>
+        //    //        {
+        //    //            StopPort();
+        //    //            Event_relay(false);
+        //    //            if (!checkON_emg)
+        //    //            {
+        //    //                StartBlinkServoBorder(LogType.Warning, 1);
+        //    //                StartBlinkLabel("Dừng khẩn cấp", txt_notify);
+        //    //                checkON_emg = true;
+        //    //            }
+        //    //        }));
+        //    //    }
+        //    //    else
+        //    //    {
+        //    //        checkON_emg = false; //tra ve trang thai cho thong bao emg
+        //    //        _ = Dispatcher.BeginInvoke(new Action(() =>
+        //    //        {
+        //    //            StopBlinkLabel();
+        //    //            StopBlinkServoBorder(1);
+        //    //        }));
+
+
+        //    //        if (in_taynam == 0)//tay cầm khi hoạt động 
+        //    //        {
+        //    //            _ = Dispatcher.BeginInvoke(new Action(() =>
+        //    //            {
+        //    //                StopPort();
+        //    //                if (!checkON_tayNam)
+        //    //                {
+        //    //                    Dispatcher.BeginInvoke(new Action(() =>
+        //    //                   {
+        //    //                       StartBlinkServoBorder(LogType.Warning);
+        //    //                       StartBlinkLabel("Đã kéo cần gạc ", txt_notify);
+        //    //                   }));
+        //    //                    checkON_tayNam = true;
+        //    //                }
+        //    //            }));
+        //    //        }
+        //    //        else
+        //    //        {
+        //    //            checkON_tayNam = false;
+        //    //            _ = Dispatcher.BeginInvoke(new Action(() =>
+        //    //            {
+        //    //                StopBlinkLabel();
+        //    //                StopBlinkServoBorder();
+        //    //                //if (in_taynam == 1 && in_drill_water == 0) txt_notify.Text = "-";
+        //    //                HandleSensorMin(inMin, ref isCheckStopMin, ref isCheckStopHome);
+        //    //                HandleSensorMax(inMax, ref isCheckStopMax);
+        //    //                HandleSensorHome(in_taynam, ref isCheckStopHome);
+        //    //                HandleAlarm(inMin, inMax, state);
+        //    //                //txt_status_servo.Text = GetServoStatus().ToString();
+        //    //            }));
+        //    //        }
+        //    //    }
+
+        //    //}
+
+
+
+
+        //}
+
+
+
+
+
+
+
+
+
+
+
+        private async Task readinputloop(CancellationToken token)
+        {
+            bool ischeckstopmin = false;
+            bool ischeckstopmax = false;
+            bool ischeckstophome = true;
+
+            bool checkon_emg = false;
+            bool checkon_taynam = false;
 
             while (!token.IsCancellationRequested)
             {
-                // pause lại
                 pauseEvent.Wait();
-                byte in0, in1, in2;
 
-                //doc cong trong contect
-                int ret = cdio.InpBit(m_Id, 0, out in0);
-                int ret1 = cdio.InpBit(m_Id, 1, out in2);
-                int ret2 = cdio.InpBit(m_Id, 2, out in1);
-                
-                //lay trang thai input 0
-                if (ret == (int)CdioConst.DIO_ERR_SUCCESS)
+                // =========================
+                // read input
+                // =========================
+                cdio.InpBit(m_Id, 2, out byte inmin);
+                cdio.InpBit(m_Id, 0, out byte inmax);
+                cdio.InpBit(m_Id, 4, out byte in_taynam);
+                cdio.InpBit(m_Id, 3, out byte in_drill_water);
+                cdio.InpBit (m_Id, 5, out byte inemg);
+                cdio.InpBit (m_Id, 6, out byte inTouch);
+
+
+                cdio.EchoBackByte(m_Id, 0, out byte state);
+                stateRelay = state;
+
+
+                cdio.OutBit(m_Id, 2, 1);
+                byte value;
+                cdio.EchoBackBit(m_Id, 2, out value);
+                status_touch = inTouch;
+                //Console.WriteLine(value);
+
+                // =========================
+                // relay
+                // =========================
+                outRelay = (inemg == 0 && check_pos_for_relay)
+                    ? 1
+                    : 0;
+                //console.writeline("out relay: "+outrelay );
+
+                Event_relay();
+                handle_Relay();
+                // =========================
+                // stt drill, water
+                // =========================
+                handDle_status_drill_water(in_drill_water);
+
+                // ==================================================
+                // priority 1 : emergency
+                // ==================================================
+                if (inemg == 1)
                 {
-                    check_sst_0 = in0 == 0;
-                     _ = Dispatcher.BeginInvoke(new Action(() =>
+                    StopPort();
+                    if (!checkon_emg)
                     {
-                        if (sensorOn)
+                        checkon_taynam = false;
+                        checkon_emg = true;
+
+                        await Dispatcher.InvokeAsync(() =>
                         {
-                            if (!serialPort.IsOpen) return;
-                            
-                            if (isCheckStopMin == false)
-                            {
-                                BlinkLabel("OVER LIMIT !!!", txt_status_servo);
-                                StopPort();
-                                isCheckStopMin = true;
-                                isCheckStopHome = false;
-                                //xuly_chamvat(lm_max);   
-                            }
-                        }
-                        else
-                        {
-                            isCheckStopMin = false;
-                        }
-                        //double index_origin_into_target = ((Set_origin_number??0 - curren_postion) / 500.0);
+                            Event_relay(false);//dung relay
+                            StartBlinkServoBorder(
+                                LogType.Warning,
+                                1);
 
-                        txt_current_position.Text = curren_postion.ToString()
-                            + $"  ({((Set_origin_number - curren_postion) / 500)-5:F2}mm)";
+                            StartBlinkLabel(
+                                "dừng khẩn cấp",
+                                txt_notify);
 
-                        //Console.WriteLine($"origin={Set_origin_number}  current={curren_postion}  diff={Set_origin_number - curren_postion}");
-                        
-                        txt_trongTai.Text = currenLoaded.ToString();
-                        //txt_status_servo.Text = currenLoaded.ToString();
+                            DisnableScreen();
+                        });
+                    }
 
-                        txt_ss1.Text = sensorOn ? "ON" : "OFF";
-                        txt_ss1.Foreground = new SolidColorBrush(
-                            (Color)ColorConverter.ConvertFromString(sensorOn ? "#16A34A" : "#DC2626")
-                            );
-                    }));
-                }
-                
-                //lay trang thai input 1
-                if (ret == (int)CdioConst.DIO_ERR_SUCCESS)
-                {
-                    bool sensorOn = in1 == 0;
-
-                    _ = Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (sensorOn) 
-                        { 
-                            if (!serialPort.IsOpen) return;
-                            if (isCheckStopMax == false)
-                            { 
-                                BlinkLabel("OVER LIMIT !!!", txt_status_servo);
-                                isCheckStopMax = true;
-                            }
-                        }
-                        else
-                        {
-                            isCheckStopMax = false;
-                        }
-
-                        txt_ss2.Text = sensorOn ? "ON" : "OFF";
-                        txt_ss2.Foreground = new SolidColorBrush(
-                            (Color)ColorConverter.ConvertFromString(sensorOn ? "#16A34A" : "#DC2626")
-                            );
-                    }));
-                }
-                await Task.Delay(50);
-
-                //lay trang thai input 2
-                if (ret == (int)CdioConst.DIO_ERR_SUCCESS)
-                {
-                    bool sensorOn = in2 == 1;
-                    _ = Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (sensorOn)
-                        {
-                            if (!serialPort.IsOpen) return;
-                            BlinkLabel("INDEX HOME", txt_status_servo);
-                            if (isCheckStopHome==false)
-                            {
-                                //StopPort();
-                                isCheckStopHome = true;
-                            }
-                            //xuly_chamvat();
-                        }
-                        else
-                        {
-                            //isCheckStopHome = false;
-                        }
-
-                        //txt_ss3.Text = sensorOn ? "ON" : "OFF";
-                        //txt_ss3.Foreground = new SolidColorBrush(
-                        //    (Color)ColorConverter.ConvertFromString(sensorOn ? "#16A34A" : "#DC2626")
-                        //    );
-                    }));
+                    await Task.Delay(50);
+                    continue;
                 }
 
-
-                // xu ly input 0 1
-                if (in0 == 0 || in1 == 0)
-                {
-
-                    _ = Dispatcher.BeginInvoke(new Action(() =>
-                      {
-                          AlarmSound.PlayAlarm();
-                          BlinkLabel("OVER LIMT !!!", txt_notify);
-                          _ = (in0 == 1) ?
-                          btn_start.IsEnabled = false :
-                          btn_Stop.IsEnabled = false;
-                      }));
-                }
+                // ==================================================
+                // priority 2 : tay gạt
+                // ==================================================
                 else
                 {
-                    _ = Dispatcher.BeginInvoke(new Action(() =>
-                      {
-                          AlarmSound.Stop();
-                          btn_start.IsEnabled = true;
-                          btn_Stop.IsEnabled = true;
-                      }));
+                   
+                    
+                    if (in_taynam == 0) {
+                        StopPort();
+                        if (!checkon_taynam)
+                        {
+                            checkon_emg = false;
+                            checkon_taynam = true;
+                            await Dispatcher.InvokeAsync(() =>
+                            {
+                                StopBlinkServoBorder(1);//tat luoon cua nut dung khan cap neu co blink 
+
+                                StartBlinkServoBorder(
+                                    LogType.Warning);
+
+                                StartBlinkLabel(
+                                    "đã kéo cần gạt",
+                                    txt_notify);
+                                DisnableScreen();
+                            });
+                            await Task.Delay(50);
+                            continue;
+                        }
+                    }
+
+                    else
+                    {
+                        checkon_taynam = false;
+                        txt_notify.Text = "-";
+                            StopBlinkLabel();
+                            StopBlinkServoBorder();
+                            StopBlinkServoBorder(1);
+                            StopBlinkServoPanel();
+                        EnableScreen();
+                    }
+
+                    //else
+                    //{
+                    //    StopBlinkLabel();
+                    //    txt_notify
+                    //}
+
+
                 }
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    HandleSensorMin(
+                        inmin,
+                        ref ischeckstopmin,
+                        ref ischeckstophome);
+
+                    HandleSensorMax(
+                        inmax,
+                        ref ischeckstopmax);
+
+                    HandleSensorHome(
+                        in_taynam,
+                        ref ischeckstophome);
+
+                    HandleAlarm(
+                        inmin,
+                        inmax,
+                        state);
+
+
+                });
+
+
+                //else
+                //{
+                //    if (checkon_taynam)
+                //    {
+                //        checkon_taynam = false;
+
+                //        await dispatcher.invokeasync(() =>
+                //        {
+                //            stopblinkservoborder();
+
+                //           stopblinklabel();
+                //        });
+                //    }
+                //}
+
+                // ==================================================
+                // priority 3 : sensor
+                // ==================================================
+
+
                 await Task.Delay(50);
             }
         }
-          
-        private void StopReadInput()
+        private async Task<int> GetServoStatus()
         {
-            //cts.Cancel();
-            //serialPort?.Close();
-            //cdio.Exit(m_Id);
+            serialPort.WriteLine("?99");
+
+            await Task.Delay(50);
+
+            string response = serialPort.ReadLine();
+
+            Match match =
+                Regex.Match(response, @"Ux\.1=(\d+)");
+
+            if (match.Success)
+            {
+                return int.Parse(match.Groups[1].Value);
+            }
+
+            return 0;
         }
 
-        private async void xuly_chamvat(double indexTo)
+        private void HandleSensorMin(byte raw, ref bool isCheckStopMin, ref bool isCheckStopHome)
         {
-            // PAUSE realtime read
-            pauseEvent.Reset();
+            bool on = raw == 0;
+            if (on)
+            {
+                if (!serialPort.IsOpen) return;
+                if (!isCheckStopMin)
+                {
+                    StopPort();
+                    isCheckStopMin = true;
+                    isCheckStopHome = false;
+                }
+            }
+            else
+            {
+                isCheckStopMin = false;
+            }
 
-            Console.WriteLine("Pause read realtime");
-            //RestartPort();
-            RestartPortAsync(indexTo);
+            txt_current_position.Text = curren_postion.ToString()
+                + $"  ({((Set_origin_number - curren_postion) / 500) - value_stopper:F2}mm)";
+            txt_trongTai.Text = currenLoaded.ToString();
+            txt_ss1.Text = on ? "ON" : "OFF";
+            txt_ss1.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(on ? "#16A34A" : "#DC2626"));
+        }
+
+
+        private void HandleSensorMax(byte raw, ref bool isCheckStopMax)
+        {
+            bool on = raw == 0;
+            if (on)
+            {
+                if (!serialPort.IsOpen) return;
+                if (!isCheckStopMax)
+                {
+                    //BlinkLabel("OVER LIMIT !!!", txt_status_servo);
+                    StopPort();
+                    isCheckStopMax = true;
+                }
+            }
+            else
+            {
+                isCheckStopMax = false;
+            }
+
+            txt_ss2.Text = on ? "ON" : "OFF";
+            txt_ss2.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(on ? "#16A34A" : "#DC2626"));
+        }
+
+        private void HandleSensorHome(byte raw, ref bool isCheckStopHome)
+        {
+        }
+
+        private void HandleAlarm(byte in0, byte in1, byte outRepaly)
+        {
+            if (in0 == 0 || in1 == 0)
+            {
+                AlarmSound.PlayAlarm();
+                //BlinkLabel("OVER LIMIT !!!", txt_notify);
+                _ = (in0 == 1) ?
+                          btn_start.IsEnabled = false :
+                          btn_Stop.IsEnabled = false;
+            }
+            else
+            {
+                AlarmSound.Stop();
+                btn_start.IsEnabled = true;
+                btn_Stop.IsEnabled = true;
+            }
+        
+        }
+
+        private void handDle_status_drill_water(byte status)
+        {
+            if (status == 1)
+            {
+                txt_status_drill.Text = "ON";
+                txt_status_drill.Foreground = new SolidColorBrush(
+                    Colors.Green);
+
+                txt_status_water.Text = "ON";
+                txt_status_water.Foreground = new SolidColorBrush(
+                    Colors.Green);
+            }
+            else
+            {
+                txt_status_drill.Text = "OFF";
+                txt_status_drill.Foreground = new SolidColorBrush(
+                    Colors.Red);
+
+                txt_status_water.Text = "OFF";
+                txt_status_water.Foreground = new SolidColorBrush(
+                    Colors.Red);
+            }
+        }
+
+        private void handle_Relay()
+        {
+            if (outRelay == 0)
+            {
+                txt_out_relay.Text = "OFF";
+                txt_out_relay.Foreground = new SolidColorBrush(
+                    Colors.Red);
+            }
+            else
+            {
+                txt_out_relay.Text = "ON";
+                txt_out_relay.Foreground = new SolidColorBrush(
+                    Colors.Green);
+            }
+        }
+
+        private void StopReadInput()
+        {
             
-            //MoveToAsync(indexTo);
-            await Task.Delay(1500);
-
-            Console.WriteLine("Resume realtime");
-
-            // chạy lại
-            pauseEvent.Set();
         }
         #endregion
 
         #region Event View
         //ham tao hieu ung mau nhap nhay khi servo di chuyen 
-        private void StartBlinkServoPanel()
+
+
+        //thay doi mau cho panel 
+        private void StartBlinkServoPanel(LogType type)
         {
             btn_fab.IsEnabled = false;
             btn_po_restart.IsEnabled = false;
             txt_po.IsEnabled = false;
-            BlinkLabel("CẢNH BÁO NGUY HIỂM",txt_notify);
+            //BlinkLabel("CẢNH BÁO NGUY HIỂM", txt_notify);
+
+            Color color;
+            switch (type)
+            {
+                case LogType.Error:
+                    color = Colors.Red;
+                    break;
+                case LogType.Warning:
+                    color = Colors.Yellow;
+                    break;
+                case LogType.Info:
+                    color = Colors.Blue;
+                    break;
+                default:
+                    color = Colors.White;
+                    break;
+            }
+
             ColorAnimation animation =
                 new ColorAnimation
                 {
-                    From = Colors.Red,
+                    From = color,
                     To = Colors.White,
                     Duration = TimeSpan.FromMilliseconds(300),
                     AutoReverse = true,
@@ -794,129 +1122,393 @@ namespace back_stopper
             btn_fab.IsEnabled = true;
             btn_po_restart.IsEnabled = true;
             txt_po.IsEnabled = true;
-
-            BlinkLabel("-", txt_notify);
         }
 
 
-        private async void BlinkLabel(string text, TextBlock  txt)
+        //thay doi mau cho panel con
+        private void StartBlinkServoBorder(LogType type,int style = 0)
         {
-            var originalColor = txt.Foreground; // Lưu màu gốc
-            var blinkColor = new SolidColorBrush(Colors.Red);
-            
-            for (int i = 0; i < 6; i++) // 3s với 0.5s mỗi lần = 6 lần đổi màu
+            Color color;
+            switch (type)
             {
-                // Đổi sang đỏ
-                txt.Foreground = blinkColor;
-                await Task.Delay(250); // Chờ 0.25s
-
-                // Đổi về màu gốc
-                txt.Foreground = originalColor;
-                await Task.Delay(250); // Chờ 0.25s
+                case LogType.Error:
+                    color = Colors.Red;
+                    break;
+                case LogType.Warning:
+                    color = Colors.Yellow;
+                    break;
+                case LogType.Info:
+                    color = Colors.Blue;
+                    break;
+                default:
+                    color = Colors.White;
+                    break;
             }
-            txt.Text = text;
-            txt.Foreground = originalColor;
+
+            ColorAnimation animation =
+                new ColorAnimation
+                {
+                    From = color,
+                    To = Colors.White,
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever
+                };
+
+            SolidColorBrush brush =
+                new SolidColorBrush(Colors.Yellow);
+
+            if (style == 0)
+            {
+                border_water.Background = brush;
+                border_drill.Background = brush;
+            }
+            if(style == 1)
+            {
+                btn_stop_main.Background = brush;
+                btn_stop_main.Foreground = new SolidColorBrush(Colors.Red);
+            }
+
+            brush.BeginAnimation(
+                SolidColorBrush.ColorProperty,
+                animation);
         }
 
+        private void StopBlinkServoBorder(int style = 0)
+        {
+            SolidColorBrush brush_water = new SolidColorBrush(
+    (Color)ColorConverter.ConvertFromString("#FFAFD7FF"));
+
+            SolidColorBrush brush_drill = new SolidColorBrush(
+    (Color)ColorConverter.ConvertFromString("#FF8E949B")
+);
+
+            if (style == 0)
+            {
+                border_water.Background = brush_water;
+                border_drill.Background = brush_drill;
+            }
+            else if (style == 1)
+            {
+                
+                btn_stop_main.Background = new SolidColorBrush(Colors.Red);
+                btn_stop_main.Foreground = new SolidColorBrush(Colors.White);
+            }
+        }
+
+        private void StartBlinkLabel(string text, TextBlock txt)
+        {
+            _blinkLabelCts?.Cancel();
+
+            _blinkLabelCts = new CancellationTokenSource();
+            var token = _blinkLabelCts.Token;
+
+            var originalText = txt.Text;
+            var originalColor = txt.Foreground;
+
+            var blinkColor = new SolidColorBrush(Colors.Red);
+            var normalColor = new SolidColorBrush(Colors.White);
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    while (!token.IsCancellationRequested)
+                    {
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            txt.Text = text;
+                            txt.Foreground = blinkColor;
+                        });
+
+                        await Task.Delay(300, token);
+
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            txt.Foreground = normalColor;
+                        });
+
+                        await Task.Delay(300, token);
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                }
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    txt.Text = originalText;
+                    txt.Foreground = originalColor;
+                });
+            });
+        }
+
+        private void StopBlinkLabel()
+        {
+            _blinkLabelCts?.Cancel();
+        }
 
         double D = 0.0;
         double L = 0.0;
         double airHole = 0.0;
+
+        // Thay thế toàn bộ hàm txt_po_KeyDown bằng đoạn này:
+
+
+        //tao method cho nhan nut 
+        // Thêm vào MainWindow.cs như 1 method mới
+        //private async Task MoveToWithSignalCheckAsync(double target, int speed = 0)
+        //{
+        //    while (true)
+        //    {
+        //        // Chờ cho đến khi status_touch = 1 (cả 2 nút đang giữ)
+        //        while (status_touch != 1)
+        //        {
+        //            StopPort();
+        //            await Task.Delay(100);
+        //        }
+
+        //        // Đảm bảo isMoving = false trước khi gọi lại
+        //        isMoving = false;
+
+        //        // status_touch = 1 → chạy motor từ vị trí hiện tại đến target
+        //        Task moveTask = (speed == 0)
+        //            ? MoveToAsync(target)
+        //            : MoveToAsync(target, speed);
+
+        //        // Vừa chạy vừa monitor tín hiệu
+        //        while (!moveTask.IsCompleted)
+        //        {
+        //            if (status_touch != 1)
+        //            {
+        //                StopPort();     // thả tay → dừng ngay
+        //                await Task.Delay(200); // chờ servo dừng hẳn + isMoving = false
+        //                break;          // quay lại vòng while chờ tín hiệu
+        //            }
+        //            await Task.Delay(50);
+        //        }
+
+        //        // Kiểm tra đã đến đích chưa (dùng curren_postion thay vì moveTask.IsCompleted)
+        //        if (Math.Abs(curren_postion - target) <= 10) return; // đến đích → thoát
+        //    }
+        //}
+
+        private async Task MoveToWithSignalCheckAsync(double target, int speed = 0)
+        {
+            while (true)
+            {
+                // Chờ signal = 1
+                while (status_touch != 1)
+                {
+                    StopPort();
+                    _runningDialog?.SetPaused(); // ← cập nhật UI dialog
+                    await Task.Delay(100);
+                }
+
+                isMoving = false;
+                _runningDialog?.SetRunning(); // ← cập nhật UI dialog
+
+                Task moveTask = (speed == 0)
+                    ? MoveToAsync(target)
+                    : MoveToAsync(target, speed);
+
+                while (!moveTask.IsCompleted)
+                {
+                    if (status_touch != 1)
+                    {
+                        StopPort();
+                        await Task.Delay(200);
+                        break;
+                    }
+                    await Task.Delay(50);
+                }
+
+                if (Math.Abs(curren_postion - target) <= 10) return;
+            }
+        }
         private async void txt_po_KeyDown(object sender, KeyEventArgs e)
         {
+            if (txt_po.Text.Length > 12) txt_po.Clear();
             if (e.Key == Key.Enter)
             {
-                var dialogConfirm = new ConfirmDialog(
-                    message: "Bạn có chắc muốn chạy lệnh này?",
-                    title: "Xác nhận",
-                    type: DialogType.Confirm
-                    );
-                dialogConfirm.Owner = this;
-                dialogConfirm.ShowDialog();
-                //if (MessageBox.Show("Bắt đầu chạy hàng ?", "Xác nhận thông tin", MessageBoxButton.YesNo,MessageBoxImage.Question) == MessageBoxResult.Yes )
-                if (dialogConfirm.IsConfirmed)
+                double startPos = curren_postion;
+                string po = txt_po.Text;
+                productData product = Sql.GetProductInfo(po);
+
+                if (product != null)
                 {
-                    double startPos = curren_postion;
-                    string po = txt_po.Text;
-                    productData product = Sql.GetProductInfo(po);
-                    if (product != null)
-                    { 
-                        txt_id.Text = product.Aufnr;
+                    check_pos_for_relay = false;
+                    double ah_num = product.airhole??0.0;
+                    string s_stopper = GetServoPortFromConfig("size_backstopper");
+                    double.TryParse(s_stopper, out double n_stopper);
+                    value_stopper = n_stopper;
+                    border_txt_po.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFE4E4E4"));
+
+                    if (ah_num != 0)
+                    {
+                        //txt_id.Text = product.Aufnr;
                         txt_PSTX.Text = product.Pstx;
                         txt_gamng.Text = product.Gamng.ToString();
                         txt_l.Text = product.C_L.ToString();
                         txt_d.Text = product.C_D.ToString();
-                        txt_airhole.Text = product.airhole.ToString();
-                        double airhole = product.airhole ?? 0;
-                        int n = Convert.ToInt32(Set_origin_number- 2500 - (airhole * 1000 / 2.0 ));
-                        Console.WriteLine("check data :"+Set_origin_number +" - "+ product.airhole+" - "+n  );
+                        txt_airhole.Text = ah_num.ToString();
 
-                        bool checkData = /*D == product.C_D && L == product.C_L &&*/ airHole == product.airhole;
+                        double airhole = product.airhole ?? 0;
+                        int n = Convert.ToInt32(
+                            Set_origin_number - (n_stopper*500) - (ah_num * 1000 / 2.0));
+
+                        pos_target = n;
+
+                        bool checkData = airHole == product.airhole && L == product.C_L && curren_postion == n;
 
                         if (!checkData)
                         {
-                            double step_backblask = 4000;
-                            double step_value = n-3;
-                            StartBlinkServoPanel();
-                            // if (n <= curren_postion)
-                            //{
-                            //Console.WriteLine("check post: " + curren_postion + " " + prev_post);
-                            //if (prev_post < curren_postion)
-                            //{
-                            //await MoveToAsync(n - step_backblask);
-                            //await MoveToAsync(step_value, 20);
-                            //}
-                            //else
-                            //{
-                            //    await MoveToAsync(n);
-                            //}
-                            //}
-                            //else if (n > curren_postion)
-                            //{
-                            //Console.WriteLine("check post: " + curren_postion + " " + prev_post);
-                            //if (prev_post > curren_postion)
-                            //{
-                            //await MoveToAsync(n + step_backblask);
-                            //await MoveToAsync(step_value, 20);
-                            //}
-                            //else
-                            //{
-                            //    await MoveToAsync(n);
-                            //}
+                            ///khu ro kieu moi khi cung chieu
+                            _ = Dispatcher.BeginInvoke(new Action(async () =>
+                            {
+                                if (isMoving) return;
 
-                            //}
-                            await MoveToAsync(n + 2000);
-                            await MoveToAsync(n, 20);
-                            //await MoveToAsync(n);
+                                // Mở dialog
+                                _runningDialog = new RunningDialog(po);
+                                _runningDialog.Owner = this;
+                                _runningDialog.Show();
 
-                            prev_post = startPos;
-                            StopBlinkServoPanel();
+                                StartBlinkServoPanel(LogType.Warning);
+
+                                double step_backblask = 2000;
+                                double step_value = n;
+
+                                if (n > curren_postion)
+                                {
+                                    await MoveToWithSignalCheckAsync(step_value);
+                                }
+                                else if (n < curren_postion)
+                                {
+                                    await MoveToWithSignalCheckAsync(n - step_backblask);
+                                    await MoveToWithSignalCheckAsync(step_value, 20);
+                                   
+                                }
+                                else
+                                {
+                                    Log("Data trung voi data truoc khong can chay", LogType.Success);
+                                }
+
+                                StopBlinkServoPanel();
+                                prev_post = startPos;
+                                D = product.C_D ?? 0;
+                                L = product.C_L ?? 0;
+                                airHole = product.airhole ?? 0;
+
+                                // Hết hành trình → hiện completed rồi tự đóng sau 1.5s
+                                _runningDialog?.SetCompleted();
+                                await Task.Delay(1500);
+                                _runningDialog?.Close();
+                                _runningDialog = null;
+                            }));
+                             
+                            txt_po.Focus();
+                            txt_po.SelectAll();
+
+
+                            ///khu ro kieu cu => khi doi chieu 
+                            //_ = Dispatcher.BeginInvoke(new Action(async () =>
+                            //{
+                            //    if (isMoving) return;
+
+                            //    // Mở dialog
+                            //    _runningDialog = new RunningDialog(po);
+                            //    _runningDialog.Owner = this;
+                            //    _runningDialog.Show();
+
+                            //    StartBlinkServoPanel(LogType.Warning);
+
+                            //    double step_backblask = 2000;
+                            //    double step_value = n;
+
+                            //    if (n <= curren_postion)
+                            //    {
+                            //        if (prev_post < curren_postion)
+                            //        {
+                            //            await MoveToWithSignalCheckAsync(n - step_backblask);
+                            //            await MoveToWithSignalCheckAsync(step_value, 20);
+                            //        }
+                            //        else
+                            //        {
+                            //            await MoveToWithSignalCheckAsync(n);
+                            //        }
+                            //    }
+                            //    else if (n > curren_postion)
+                            //    {
+                            //        if (prev_post > curren_postion)
+                            //        {
+                            //            await MoveToWithSignalCheckAsync(n + step_backblask);
+                            //            await MoveToWithSignalCheckAsync(step_value, 20);
+                            //        }
+                            //        else
+                            //        {
+                            //            await MoveToWithSignalCheckAsync(n);
+                            //        }
+                            //    }
+                            //    else
+                            //    {
+                            //        Log("Data trung voi data truoc khong can chay", LogType.Success);
+                            //    }
+
+                            //    StopBlinkServoPanel();
+                            //    prev_post = startPos;
+                            //    D = product.C_D ?? 0;
+                            //    L = product.C_L ?? 0;
+                            //    airHole = product.airhole ?? 0;
+
+                            //    // Hết hành trình → hiện completed rồi tự đóng sau 1.5s
+                            //    _runningDialog?.SetCompleted();
+                            //    await Task.Delay(1500);
+                            //    _runningDialog?.Close();
+                            //    _runningDialog = null;
+                            //}));
+
+                            // Khi thả tay → stop ngay
+                            //twoHand.OnAnyReleased = () =>
+                            //{
+                            //    Dispatcher.BeginInvoke(new Action(() =>
+                            //    {
+                            //        StopPort();
+                            //        StopBlinkServoPanel();
+                            //    }));
+                            //};
+
+                            //twoHand.ShowDialog();
                         }
                         else
                         {
-                            Log("Data trung voi data truoc khong can chay",LogType.Success);
-                        }
+                            Log("Data trùng với data trước không cần chạy", LogType.Success);
 
-                        D = product.C_D ?? 0;
-                        L = product.C_L ?? 0;
-                        airHole = product.airhole ?? 0;
+                            D = product.C_D ?? 0;
+                            L = product.C_L ?? 0;
+                            airHole = product.airhole ?? 0;
+                        }
                     }
-                    //khong có data
                     else
                     {
-                        border_txt_po.BorderBrush =
-                            new SolidColorBrush(Colors.Red);
-
-                        border_txt_po.Background =
-                            new SolidColorBrush(
-                                (Color)ColorConverter.ConvertFromString("#FEF2F2"));
-
-                        TextBoxHelper.SetWatermark(
-                            txt_po,"PO NOT FOUND !!!");
-                        txt_po.Clear();
-                        txt_po.Focus();
+                        var dialogConfirm = new ConfirmDialog(
+                            message: "PO này không có công đoạn AIR HOLE?",
+                            title: "Cảnh báo!",
+                            type: DialogType.Confirm);
+                        dialogConfirm.Owner = this;
+                        dialogConfirm.ShowDialog();
                     }
                 }
+                else
+                {
+                    // PO not found
+                    //border_txt_po.BorderBrush = new SolidColorBrush(Colors.Red);
+                    border_txt_po.Background = new SolidColorBrush(
+                        (Color)ColorConverter.ConvertFromString("#FEF2F2"));
+                    TextBoxHelper.SetWatermark(txt_po, "PO NOT FOUND !!!");
+                    txt_po.Clear();
+                    txt_po.Focus();
+                }
+                //}
             }
         }
 
@@ -938,11 +1530,10 @@ namespace back_stopper
                     lb_check_emplyee.Foreground =
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
-                    namePort = GetServoPortFromConfig();
+                    namePort = GetServoPortFromConfig("Name_Servo");
                     Task.Delay(500);
                     connectPort(namePort);
-
-                    txt_notify.Text = "Bạn hãy set gốc trước khi thao tác !!";
+                   
                 }
                 else
                 {
@@ -953,7 +1544,7 @@ namespace back_stopper
                     lb_check_emplyee.Foreground =
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#DC2626"));
-                    BlinkLabel("NO!", lb_check_emplyee);
+                    lb_check_emplyee.Text = "NO";
                 }
             }
         }
@@ -964,6 +1555,8 @@ namespace back_stopper
             D = 0;
             L = 0;
             airHole = 0;
+            check_pos_for_relay = false;
+            GetValueStep();
             await NextPortAsync();
             //txt_current_position.Text = curren_postion.ToString();
         }
@@ -974,6 +1567,8 @@ namespace back_stopper
             D = 0;
             L = 0;
             airHole = 0;
+            check_pos_for_relay = false;
+            GetValueStep();
             await PrevPortAsync();
         }
 
@@ -989,11 +1584,10 @@ namespace back_stopper
             //    RestartPortAsync(lm_min);
             //}
 
-            list_log.Items.Clear();
+            //list_log.Items.Clear();
 
             txt_po.Clear();
             txt_po.Focus();
-            txt_id.Text = "";
             txt_PSTX.Text = "";
             txt_gamng.Text = "";
             txt_l.Text = "";
@@ -1007,24 +1601,15 @@ namespace back_stopper
         private async void MetroWindow_Closed(object sender, EventArgs e)
         {
             //StopPort();
-            bool checkIndex_ss = txt_ss1.Text.Contains("ON");
-            if (checkIndex_ss == true)
-            {
-                RestartPortAsync(lm_max);
-            }
-            else
-            {
-                RestartPortAsync(lm_min);
-            }
-
+            StopPort();
             StopReadInput();
         }
 
-        private void btn_po_restart_Click(object sender, RoutedEventArgs e)
+        private async void btn_po_restart_Click(object sender, RoutedEventArgs e)
         {
             txt_po.Clear();
             txt_po.Focus();
-            txt_id.Text = "";
+            prev_post = 0;
             txt_PSTX.Text = "";
             txt_gamng.Text = "";
             txt_l.Text = "";
@@ -1033,41 +1618,46 @@ namespace back_stopper
             D = 0;
             L = 0;
             airHole = 0;
-            //RestartPort();
+
+            // Start blink TRƯỚC khi chạy
+            StartBlinkLabel("Lưu Ý: Servo đang di chuyển", txt_notify);
+
             bool checkIndex_ss = txt_ss1.Text.Contains("ON");
-            if (checkIndex_ss == true)
-            {
-                RestartPortAsync(Set_origin_number, true);
-            }
+
+            if (checkIndex_ss)
+                await RestartPortAsync(Set_origin_number, true);
             else
+                await RestartPortAsync(lm_min);
+
+            // Stop blink SAU khi chạy xong
+            StopBlinkLabel();
+        }
+        #endregion
+        private void GetValueStep()
+        {
+            double.TryParse(num_step.Value.ToString(), out double step);
+            Post_Master = (int)(step * 500);
+            if (txt_step_display != null)
             {
-                RestartPortAsync(lm_min);
+                //double sw_mm = step / 500.0;
+                //double.TryParse(step,out double d);
+                txt_step_display.Text = Post_Master.ToString() + " - " + step.ToString() + "mm";
             }
         }
-
-        #endregion
-
         private void num_step_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double?> e)
         {
             //int.TryParse(num_step.Value.ToString(), out int n);
             //Post_Master = n;
-
-            int step = (int)(num_step.Value ?? 1000);
-            Post_Master = step;
-            if (txt_step_display != null)
-            {
-                double sw_mm = step / 500.0;
-                txt_step_display.Text = step.ToString() +" - "+ sw_mm.ToString() + "mm";
-            }
+            GetValueStep();
+          
         }
 
-        private void btn_fab_Click(object sender, RoutedEventArgs e)
+
+        //event btn fab
+        void Event_fab()
         {
-            //popup_jog.IsOpen = !popup_jog.IsOpen;
-            // Nếu popup đang mở → đóng luôn không cần hỏi mật khẩu
             if (popup_jog.IsOpen)
             {
-                popup_jog.IsOpen = false;
                 return;
             }
 
@@ -1080,7 +1670,13 @@ namespace back_stopper
             {
                 popup_jog.IsOpen = true;
             }
+        }
+        private void btn_fab_Click(object sender, RoutedEventArgs e)
+        {
+            //popup_jog.IsOpen = !popup_jog.IsOpen;
+            // Nếu popup đang mở → đóng luôn không cần hỏi mật khẩu
 
+            Event_fab();
         }
 
         private void btn_stop_main_Click(object sender, RoutedEventArgs e)
@@ -1091,16 +1687,128 @@ namespace back_stopper
         private void btn_set_origin_Click(object sender, RoutedEventArgs e)
         {
             Set_origin_number = Convert.ToInt32(curren_postion);
-            Log("get origin: "+Set_origin_number);
             txt_origin_pos.Text = Set_origin_number.ToString();
             if (txt_origin_pos.Text != "-")
             {
                 border_main.IsEnabled = true;
-                btn_Stop.Background = new SolidColorBrush(
-                        (Color)ColorConverter.ConvertFromString("#F59E0B"));
-                btn_restart.Background = new SolidColorBrush(
-                        (Color)ColorConverter.ConvertFromString("#FFF50B4B"));
+                //btn_Stop.Background = new SolidColorBrush(
+                //        (Color)ColorConverter.ConvertFromString("#DC2626"));
+                //btn_restart.Background = new SolidColorBrush(
+                //        (Color)ColorConverter.ConvertFromString("#FFF50B4B"));
+
+                //luu vao file 
+                SaveOrigin(Set_origin_number??0);
+                txt_po.Focus();
+                txt_po.SelectAll();
             }
+            popup_jog.IsOpen = false;
+
+        }
+
+
+
+        #region xu ly slide bar
+        private bool _isPanelOpen = true;
+
+        private void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isPanelOpen)
+            {
+                // Ẩn panel — animate Width về 0
+                var anim = new GridLengthAnimation
+                {
+                    From = col_right.Width,
+                    To = new GridLength(0),
+                    Duration = TimeSpan.FromMilliseconds(250)
+                };
+                col_right.BeginAnimation(ColumnDefinition.WidthProperty, anim);
+
+                border_control.Visibility = Visibility.Collapsed;
+                txt_toggle_icon.Text = "◀";
+                _isPanelOpen = false;
+            }
+            else
+            {
+                // Hiện panel — animate Width về 1*
+                border_control.Visibility = Visibility.Visible;
+
+                var anim = new GridLengthAnimation
+                {
+                    From = new GridLength(0),
+                    To = new GridLength(1, GridUnitType.Star),
+                    Duration = TimeSpan.FromMilliseconds(250)
+                };
+                col_right.BeginAnimation(ColumnDefinition.WidthProperty, anim);
+
+                txt_toggle_icon.Text = "▶";
+                _isPanelOpen = true;
+            }
+        }
+
+        #endregion
+
+        private void txt_po_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox txt)
+            {
+                txt.SelectAll();
+            }
+        }
+
+        private void txt_po_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            TextBox txt = sender as TextBox;
+
+            if (txt != null && !txt.IsKeyboardFocusWithin)
+            {
+                e.Handled = true;
+                txt.Focus();
+            }
+        }
+
+        private void Event_relay(bool b = true)
+        {
+            if (b)
+            {
+                //bat relay
+                if (outRelay == 0)
+                {
+                    cdio.OutBit(m_Id, 0, 0);
+                }
+                else
+                {
+                    cdio.OutBit(m_Id, 0, 1);
+                }
+            }
+            else
+            {
+                cdio.OutBit(m_Id, 0, 0);
+            }
+        }
+        private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            //Event_relay();
+        }
+
+        private void btn_cancel_control_Click(object sender, RoutedEventArgs e)
+        {
+            popup_jog.IsOpen = false;
+            txt_po.Focus();
+            txt_po.SelectAll();
+        }
+
+        private void DisnableScreen()
+        {
+            border_employee.IsEnabled = false;
+            border_control.IsEnabled = false;
+            border_main.IsEnabled = false;
+        }
+
+        private void EnableScreen()
+        {
+            border_employee.IsEnabled = true;
+            border_control.IsEnabled = true;
+            border_main.IsEnabled = true;
         }
     }
 }

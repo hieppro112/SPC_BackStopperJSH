@@ -17,8 +17,12 @@ namespace back_stopper
         //check version 
         protected override void OnStartup(StartupEventArgs e)
         {
+            //base.OnStartup(e);
+            //AutoUpdater.Start(@"\\192.168.122.2\Soft F2\Application\158.BackStopper\Build\updateVersion");
+            // Tắt chuyển đổi touch → mouse để nhận đa chạm thật sự
+            AppContext.SetSwitch("Switch.System.Windows.Input.Stylus.DisableStylusAndTouchSupport", false);
+
             base.OnStartup(e);
-            AutoUpdater.Start(@"\\192.168.122.2\Soft F2\Application\158.BackStopper\Build\updateVersion");
         }
 
     }
