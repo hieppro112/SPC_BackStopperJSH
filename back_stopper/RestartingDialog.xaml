@@ -1,0 +1,59 @@
+﻿<Window x:Class="back_stopper.RestartingDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="" Height="451.494" Width="825.959"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        Topmost="True">
+
+    <Border CornerRadius="16" Background="White"
+            BorderBrush="#E5E7EB" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" Opacity="0.15" ShadowDepth="4"/>
+        </Border.Effect>
+
+        <StackPanel Margin="32,28,32,28" VerticalAlignment="Center">
+
+
+            <!-- Trạng thái chính -->
+            <Border  CornerRadius="8"
+                    Background="White" Padding="16,12" Margin="0,0,0,16">
+                <TextBlock
+                           Text="Hãy chú ý an toàn bạn nhé !!!"
+                           FontSize="30" FontWeight="SemiBold"
+                           Foreground="#FF0627F9"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Border>
+            <!-- Icon -->
+            <TextBlock x:Name="txt_icon"
+                       Text="⚙️"
+                       FontSize="48"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,12"/>
+            
+
+            <!-- Trạng thái chính -->
+            <Border x:Name="border_status" CornerRadius="8"
+                    Background="#EFF6FF" Padding="16,12" Margin="0,0,0,16">
+                <TextBlock x:Name="txt_status"
+                           Text="Đang Restart về vị trí gốc..."
+                           FontSize="30" FontWeight="SemiBold"
+                           Foreground="#2563EB"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Border>
+
+            <!-- Thanh loading animation -->
+            <ProgressBar x:Name="progress_bar"
+                         IsIndeterminate="True"
+                         Height="6"
+                         Foreground="#2563EB"
+                         BorderThickness="0" Background="#FFDBEAFE"/>
+
+        </StackPanel>
+    </Border>
+</Window>
