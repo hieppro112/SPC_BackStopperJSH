@@ -1,0 +1,91 @@
+﻿<Window x:Class="back_stopper.RunningDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="" Height="400" Width="864"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        Topmost="True">
+
+    <Border CornerRadius="16" Background="White"
+            BorderBrush="#E5E7EB" BorderThickness="1" Margin="0,0,0,-43">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" Opacity="0.15" ShadowDepth="4"/>
+        </Border.Effect>
+
+        <StackPanel Margin="32,28,32,28">
+
+            <!-- PO Info -->
+            <TextBlock x:Name="txt_po_info" 
+                       Text="PO: —"
+                       FontSize="23" Foreground="#6B7280"
+                       HorizontalAlignment="Center"/>
+
+            <!-- Icon trạng thái -->
+            <TextBlock x:Name="txt_icon"
+                       Text="✋"
+                       FontSize="23"
+                       HorizontalAlignment="Center"
+                       Margin="0,12,0,8"/>
+
+            <!-- Trạng thái chính -->
+            <Border x:Name="border_status" CornerRadius="8"
+                    Background="#F3F4F6" Padding="16,10" Margin="0,0,0,16">
+                <TextBlock x:Name="txt_status"
+                           Text="Giữ cả 2 nút để bắt đầu chạy"
+                           FontSize="23" FontWeight="Bold"
+                           Foreground="#FF4B87FF"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Border>
+
+            <!-- Hướng dẫn -->
+            <Border CornerRadius="8" Background="#F8FAFC"
+                    BorderBrush="#E2E8F0" BorderThickness="1"
+                    Padding="14,10">
+                <StackPanel>
+                    <TextBlock Text="📌  Hướng dẫn thao tác"
+                               FontSize="23" FontWeight="Bold"
+                               Foreground="#94A3B8" Margin="0,0,0,6"/>
+                    <TextBlock Text="• Giữ cả 2 nút → motor chạy"
+                               FontSize="23" Foreground="#475569"/>
+                    <TextBlock Text="• Thả tay → motor dừng ngay (pause)"
+                               FontSize="23" Foreground="#475569"/>
+                    <TextBlock Text="• Giữ lại → tiếp tục từ vị trí hiện tại"
+                               FontSize="23" Foreground="#475569"/>
+                </StackPanel>
+
+                
+            </Border>
+            <Button x:Name="btn_cancel"
+                    Content="✕  Hủy hành trình"
+                    Height="40"
+                    FontSize="13" FontWeight="SemiBold"
+                    Foreground="White"
+                    Background="#EF4444"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    Margin="30"
+                    Click="btn_cancel_Click">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="8">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+        </StackPanel>
+    </Border>
+</Window>

@@ -67,12 +67,14 @@ namespace back_stopper
         private void btn_confirm_Click(object sender, RoutedEventArgs e)
         {
             IsConfirmed = true;
+            //DialogResult = true;
             Close();
         }
 
         private void btn_cancel_Click(object sender, RoutedEventArgs e)
         {
             IsConfirmed = false;
+            //DialogResult = true;
             Close();
         }
     }
