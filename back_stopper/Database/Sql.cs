@@ -13,20 +13,6 @@ namespace back_stopper.Database
     {
         public static string connectionString { get; } = "Data Source=192.168.122.2;Initial Catalog=MANUFASPCPD;User ID=kuser;Password=SPC123@";
 
-        //        public static string getDataforPo { get;} = @"SELECT 
-        //    req_hed.AUFNR,
-        //    req_hed.PHCD,
-        //	req_hed.GAMNG,
-
-        //	pc_master.C_L,
-        //    pc_master.C_D,
-        //	pc_master.AirHole
-        //FROM MANUFASPCPD.dbo.MANUFA_F_PD_DT_REQ_HED req_hed
-        //LEFT JOIN F2Database.dbo.F2_PC_MASTER_2 pc_master
-        //    ON req_hed.PHCD = pc_master.C_MATNR
-        //WHERE req_hed.AUFNR = @po
-        //";
-
         //dl nhan vien
         public static string connection_Employee { get; } = @"Data Source=192.168.0.11;Initial Catalog=SGPrecision;User ID=hrmsadmin;Password=adminhrms;Max Pool Size=50;Application Name=Molybden_DL;";
         public static string query_id_get_name { get; } = "select [Name] from DataSPC where [Code] = @idNV";
@@ -83,7 +69,9 @@ namespace back_stopper.Database
                 END AS ProductName,
 
                 req.PSTX,
-                pc_master.AirHole
+                pc_master.AirHole,
+                pc_master.AirHole_Tol_Low,
+	            pc_master.AirHole_Tol_Up
 
             FROM MANUFASPCPD.dbo.MANUFA_F_PD_DT_REQ_HED req
 
@@ -119,6 +107,8 @@ namespace back_stopper.Database
                             MatchCollection matches = Regex.Matches(reader["ProductName"]?.ToString(), @"\d+");
                             double.TryParse(matches[0].Value, out double d);
                             double.TryParse(matches[1].Value, out double l);
+                            double.TryParse(reader["AirHole_Tol_Low"]?.ToString(),out double ah_low);
+                            double.TryParse(reader["AirHole_Tol_Up"]?.ToString(),out double ah_up);
 
 
                             data = new productData
@@ -128,7 +118,6 @@ namespace back_stopper.Database
                                 Gamng = reader["GAMNG"] != DBNull.Value
                                     ? Convert.ToInt32(reader["GAMNG"])
                                     : 0,
-
                                 Prt_addcmt2 = reader["prt_addcmt2"]?.ToString(),
 
                                 ProductName = reader["ProductName"]?.ToString(),
@@ -136,6 +125,9 @@ namespace back_stopper.Database
                                 Pstx = reader["PSTX"]?.ToString(),
                                 C_D=d,
                                 C_L=l,
+                                airhole_to_low = ah_low,
+                                airhole_to_up = ah_up,
+
 
                                 airhole = airhole
                             };
@@ -147,6 +139,8 @@ namespace back_stopper.Database
             return data;
         }
 
+        //lay min max
+       
     }
 }
 
