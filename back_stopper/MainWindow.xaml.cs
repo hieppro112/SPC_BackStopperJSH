@@ -22,7 +22,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using AutoUpdaterDotNET;
-
+using System.Diagnostics;
 
 namespace back_stopper
 {
@@ -31,7 +31,10 @@ namespace back_stopper
     /// </summary>
     public partial class MainWindow : MetroWindow
     {
-
+        //doi tuong man hinh ban phim 
+        private NumericKeyboard _numericKeyboard;
+        //doi nhan vien 
+        EmployeeData employee;
         //status drill và nút êmrgy
         private bool checkon_emg = false;
         private bool checkon_taynam = false;
@@ -60,7 +63,7 @@ namespace back_stopper
 
         //bien dung de pausse luong sensor
         private ManualResetEventSlim pauseEvent =
-    new ManualResetEventSlim(true);
+        new ManualResetEventSlim(true);
         // Khai báo đối tượng API của Contec
         private Cdio cdio = new Cdio();
 
@@ -74,19 +77,22 @@ namespace back_stopper
         //toa do goc 
         int tdGoc = 0;
         //config ss control speed servo 
-        int speed_servo = 70;
-        int accel_servo = 30;
-        int decel_servo = 0;
+        int speed_servo = 85;
+        int accel_servo = 50;
+        int decel_servo = 50;
         double prev_post;
         private string namePort = "";
 
         bool check_pos_for_relay = false;
 
-        double pos_target = 0;
+        double pos_target = -99999999;
         SerialPort serialPort = new SerialPort();
         int Post_Master = 1000;
         double curren_postion = 50;
         double currenLoaded = 50;
+
+        //gia tri stopper trong conffig
+        double n_stopper;
 
         //bien luu trang thai tay cam 
         private byte temp_taycam;
@@ -110,15 +116,15 @@ namespace back_stopper
                 int.TryParse(s, out int num);
                 Set_origin_number = num;
                 txt_origin_pos.Text = num.ToString();
-                //luu vao file 
-                //SaveOrigin(Set_origin_number ?? 0, "origin:");
             }
             DisnableScreen();
-            //connectPort(namePort);
 
             ConnectContec();
             connectPort(namePort);
             StartReadInput();
+            string s_stopper = GetServoPortFromConfig("size_backstopper");
+            double.TryParse(s_stopper, out n_stopper);
+
         }
 
 
@@ -242,7 +248,6 @@ namespace back_stopper
                     border_control.IsEnabled = true;
                     await Task.Delay(50);
                     Log("Mortor OK",LogType.Success);
-                    EnableScreen();
 
                     turnOff_blink_statusServo();
                     //ConnectContec();
@@ -480,7 +485,7 @@ namespace back_stopper
                 await Task.Delay(150);
 
                 // acceleration
-                //SendCommand("A=" + accel_servo);
+                SendCommand("A=" + accel_servo);
 
                 await Task.Delay(50);
 
@@ -514,7 +519,7 @@ namespace back_stopper
             {
                 isMoving = false;
                 //kiem tra dung vi tri chay chua 
-                check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 1005) && (Math.Abs(pos_target - curren_postion) >= 0);
+                check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 505) && (Math.Abs(pos_target - curren_postion) >= 0);
                 Console.WriteLine("pos: " + pos_target + "curr pos " + curren_postion + "result: "+check_pos_for_relay);
 
                 if (check_pos_for_relay)
@@ -550,8 +555,8 @@ namespace back_stopper
                 //khi khong dang trong min 
                 if(index_min == false)
                 {
-                    await MoveToAsync(curren_postion -10000, 40);
-                    await MoveToAsync(Set_origin_number??lm_max,40);
+                    await MoveToAsync(curren_postion -2000, 40);
+                    await MoveToAsync(Set_origin_number  ??lm_max,40);
                 }
             }
             finally
@@ -603,11 +608,13 @@ namespace back_stopper
                 else
                 {
                     // Không crash — chỉ log lỗi, app vẫn chạy bình thường
-                    Log($"Contec không kết nối được (mã lỗi: 0x{ret:X}) — kiểm tra driver và device name DIO000", LogType.Warning);
+                    Log($"Contec không kết nối được (mã lỗi: {ret}) — kiểm tra driver và device name DIO000", LogType.Warning);
 
                     // Disable các label sensor cho rõ
                     txt_ss1.Text = "N/A";
                     txt_ss2.Text = "N/A";
+                    DisnableScreen();
+
                 }
             }
             catch (Exception ex)
@@ -616,6 +623,7 @@ namespace back_stopper
                 Log($"Lỗi khởi tạo Contec: {ex.Message}", LogType.Error);
                 txt_ss1.Text = "N/A";
                 txt_ss2.Text = "N/A";
+                DisnableScreen();
             }
         }
 
@@ -637,6 +645,12 @@ namespace back_stopper
             while (!token.IsCancellationRequested)
             {
                 // =========================
+                // Enable screen
+                // =========================
+                int ret = cdio.Init($"{nameContect}", out m_Id);
+                
+
+                // =========================
                 // Đọc trạng thái servo realtime
                 // =========================
                 if (!serialPort.IsOpen)
@@ -657,8 +671,6 @@ namespace back_stopper
                     }
                 }
 
-                
-                int ret = cdio.Init($"{nameContect}", out m_Id);
                 if (!(ret == (int)CdioConst.DIO_ERR_SUCCESS))
                 {
                     ConnectContec();
@@ -727,7 +739,7 @@ namespace back_stopper
                 // sx logic uu tien 
                 // =========================
                 //Console.WriteLine("check inEMG = "+checkon_emg);
-                _ = XylyCambien(inemg,in_taynam);
+                _ = XylyCambien(inemg,in_taynam,ret);
 
                 
                 await Dispatcher.InvokeAsync(() =>
@@ -812,7 +824,7 @@ namespace back_stopper
             });
         }
 
-        private async Task XylyCambien(byte inemg, byte in_taynam)
+        private async Task XylyCambien(byte inemg, byte in_taynam, int stt_ret)
         {
             // ==================================================
             // priority 1 : emergency
@@ -820,14 +832,14 @@ namespace back_stopper
 
 
             int ret = cdio.Init($"{nameContect}", out m_Id);
-                if (inemg == 1)
+            if (inemg == 1)
             {
-                
+                StopPort();
                 if (!checkon_emg)
                 {
                     checkon_taynam = false;
                     checkon_emg = true;
-                    
+
                     await Dispatcher.InvokeAsync(() =>
                     {
                         Event_relay(false);//dung relay
@@ -839,13 +851,14 @@ namespace back_stopper
                         StartBlinkLabel(
                             "DỪNG KHẨN CẤP",
                             txt_notify);
-                         _ = eventCancel("⚠ EMERGENCY! Hành trình đã bị dừng",LogType.Error);
-                        
+                        _ = eventCancel("⚠ EMERGENCY! Hành trình đã bị dừng", LogType.Error);
+
                     });
                 }
 
                 await Task.Delay(50);
                 //continue;
+
             }
 
             // ==================================================
@@ -853,7 +866,6 @@ namespace back_stopper
             // ==================================================
             else
             {
-                //if (in_taynam == 0 && ret == (int)CdioConst.DIO_ERR_SUCCESS) 
                 if (temp_taycam ==0 && ret == (int)CdioConst.DIO_ERR_SUCCESS)
                 {
                     StopPort();
@@ -889,7 +901,10 @@ namespace back_stopper
                     StopBlinkServoBorder();
                     StopBlinkServoBorder(1);
                     StopBlinkServoPanel();
-                    EnableScreen();
+                    if (employee != null && (ret == (int)CdioConst.DIO_ERR_SUCCESS) && serialPort.IsOpen)
+                    {
+                        EnableScreen();
+                    }
                 }
             }
 
@@ -915,6 +930,7 @@ namespace back_stopper
 
         private void HandleSensorMin(byte raw, ref bool isCheckStopMin, ref bool isCheckStopHome)
         {
+            
             bool on = raw == 0;
             if (on)
             {
@@ -949,7 +965,6 @@ namespace back_stopper
                 if (!serialPort.IsOpen) return;
                 if (!isCheckStopMax)
                 {
-                    //BlinkLabel("OVER LIMIT !!!", txt_status_servo);
                     StopPort();
                     isCheckStopMax = true;
                 }
@@ -1256,142 +1271,148 @@ namespace back_stopper
         private CancellationTokenSource _moveCts; 
         private async void txt_po_KeyDown(object sender, KeyEventArgs e)
         {
-            if (txt_po.Text.Trim().Length > 12) txt_po.Clear();
             if (e.Key == Key.Enter)
             {
-                double startPos = curren_postion;
-                string po = txt_po.Text.Trim();
-                productData product = Sql.GetProductInfo(po);
-
-                if (product != null)
+                if (txt_po.Text.Length == 12)
                 {
-                    double ah_num = product.airhole ?? 0.0;
-                    string s_stopper = GetServoPortFromConfig("size_backstopper");
-                    double.TryParse(s_stopper, out double n_stopper);
-                    value_stopper = n_stopper;
-                    border_txt_po.Background = new SolidColorBrush(
-                        (Color)ColorConverter.ConvertFromString("#FFE4E4E4"));
+                    double startPos = curren_postion;
+                    string po = txt_po.Text.Trim();
+                    productData product = Sql.GetProductInfo(po);
 
-                    if (ah_num != 0)
+                    if (product != null)
                     {
-                        txt_PSTX.Text = product.Pstx;
-                        txt_gamng.Text = product.Gamng.ToString() +" Cái";
-                        txt_l.Text = product.C_L.ToString() +" mm";
-                        txt_d.Text = product.C_D.ToString() + " mm";
-                        txt_airhole.Text = ah_num.ToString() +" mm";
+                        double ah_num = product.airhole ?? 0.0;
 
-                        double airhole = product.airhole ?? 0;
-                        int n = Convert.ToInt32(
-                            Set_origin_number - (n_stopper * 500) - (ah_num * 1000 / 2.0));
+                        value_stopper = n_stopper;
+                        border_txt_po.Background = new SolidColorBrush(
+                            (Color)ColorConverter.ConvertFromString("#FFE4E4E4"));
 
-                        pos_target = n;
-
-                        bool checkData = airHole == product.airhole && L == product.C_L;
-
-                        if (!checkData)
+                        if (ah_num != 0)
                         {
+                            txt_PSTX.Text = product.Pstx;
+                            txt_gamng.Text = product.Gamng.ToString() + " Cái";
+                            txt_l.Text = product.C_L.ToString() + " mm";
+                            txt_d.Text = product.C_D.ToString() + " mm";
+                            txt_airhole.Text = ah_num.ToString() + " mm";
+                            //Console.WriteLine($"AH low: {product.airhole_to_low} - AH up: {product.airhole_to_up}");
 
-                            //luu lai so lan quet PO 
-                            times_restart += 1;
-                            SaveOrigin(times_restart, "times_restart_home");
+                            double airhole = product.airhole ?? 0;
+                            int n = Convert.ToInt32(
+                                Set_origin_number - (n_stopper * 500) - (ah_num * 500));
+                            //Console.WriteLine("number origin: "+Set_origin_number);
 
-                            check_pos_for_relay = false;
 
-                            _ = Dispatcher.BeginInvoke(new Action(async () =>
+                            bool checkData = airHole == product.airhole && L == product.C_L;
+
+                            if (!checkData)
                             {
-                                if (isMoving) return;
+                                //luu lai so lan quet PO 
+                                times_restart += 1;
+                                SaveOrigin(times_restart, "times_restart_home");
 
-                                // Kill task cũ nếu còn sống ngầm
-                                _moveCts?.Cancel();
-                                _moveCts = new CancellationTokenSource();
-                                var token = _moveCts.Token;
+                                check_pos_for_relay = false;
 
-                                // Mở dialog
-                                _runningDialog?.Close();
-                                _runningDialog = new RunningDialog(po);
-                                _runningDialog.Owner = this;
-
-                                // Gán callback hủy
-                                _runningDialog.OnCancelled = () =>
+                                _ = Dispatcher.BeginInvoke(new Action(async () =>
                                 {
+                                    if (isMoving) return;
+
+                                    // Kill task cũ nếu còn sống ngầm
                                     _moveCts?.Cancel();
-                                    StopPort();
-                                    StopBlinkServoPanel();
-                                    _lightState = LightState.Off;
+                                    _moveCts = new CancellationTokenSource();
+                                    var token = _moveCts.Token;
 
-                                    Dispatcher.InvokeAsync(() =>
+                                    // Mở dialog
+                                    _runningDialog?.Close();
+                                    _runningDialog = new RunningDialog(po);
+                                    _runningDialog.Owner = this;
+
+                                    // Gán callback hủy
+                                    _runningDialog.OnCancelled = () =>
                                     {
-                                        txt_PSTX.Text = "";
-                                        txt_gamng.Text = "";
-                                        txt_l.Text = "";
-                                        txt_d.Text = "";
-                                        txt_airhole.Text = "";
-                                        airHole = 0;
-                                        L = 0;
-                                        D = 0;
-                                        txt_po.Clear();
-                                        txt_po.Focus();
-                                        Log("Hành trình đã bị hủy — vui lòng quét PO mới", LogType.Warning);
-                                    });
-                                };
+                                        _moveCts?.Cancel();
+                                        StopPort();
+                                        StopBlinkServoPanel();
+                                        _lightState = LightState.Off;
 
-                                _runningDialog.Show();
-                                StartBlinkServoPanel(LogType.Warning);
+                                        Dispatcher.InvokeAsync(() =>
+                                        {
+                                            txt_PSTX.Text = "";
+                                            txt_gamng.Text = "";
+                                            txt_l.Text = "";
+                                            txt_d.Text = "";
+                                            txt_airhole.Text = "";
+                                            airHole = 0;
+                                            L = 0;
+                                            D = 0;
+                                            txt_po.Clear();
+                                            txt_po.Focus();
+                                            Log("Hành trình đã bị hủy — vui lòng quét PO mới", LogType.Warning);
+                                        });
+                                    };
 
-                                double step_backblask = 2000;
-                                double step_value = n;
+                                    _runningDialog.Show();
+                                    StartBlinkServoPanel(LogType.Warning);
 
-                                if (n >= curren_postion)
-                                {
-                                    await MoveToWithSignalCheckAsync(step_value, 0, token);
-                                }
-                                else if (n < curren_postion)
-                                {
-                                    await MoveToWithSignalCheckAsync(n - step_backblask, 0, token);
-                                    await MoveToWithSignalCheckAsync(step_value, 20, token);
-                                }
+                                    double step_backblask = 2000 ;
+                                    //double step_value = n +  (((product.airhole_to_low ?? 0) + (product.airhole_to_up ?? 0))/2) ;
+                                    double step_value = n - 300;
+                                    pos_target = step_value;
+                                    if (n >= curren_postion)
+                                    {
+                                        await MoveToWithSignalCheckAsync(step_value, 0, token);
+                                    }
+                                    else if (n < curren_postion)
+                                    {
+                                        await MoveToWithSignalCheckAsync(step_value - step_backblask, 0, token);
+                                        await MoveToWithSignalCheckAsync(step_value , 70, token);
+                                    }
 
-                                // Bị hủy giữa chừng → không làm gì thêm
-                                if (token.IsCancellationRequested) return;
+                                    // Bị hủy giữa chừng → không làm gì thêm
+                                    if (token.IsCancellationRequested) return;
 
-                                StopBlinkServoPanel();
-                                prev_post = startPos;
+                                    StopBlinkServoPanel();
+                                    prev_post = startPos;
+                                    D = product.C_D ?? 0;
+                                    L = product.C_L ?? 0;
+                                    airHole = product.airhole ?? 0;
+
+                                    // Hoàn thành → tắt callback trước khi close
+                                    _runningDialog.OnCancelled = null;
+                                    _runningDialog?.SetCompleted();
+                                    await Task.Delay(1500);
+                                    _runningDialog?.Close();
+                                    _runningDialog = null;
+                                }));
+
+                                txt_po.Focus();
+                                txt_po.SelectAll();
+                            }
+                            else
+                            {
+                                _ = new ToastNotification("Data trùng không cần chạy lại", LogType.Info)
+                                        .ShowAndAutoClose();
                                 D = product.C_D ?? 0;
                                 L = product.C_L ?? 0;
                                 airHole = product.airhole ?? 0;
-
-                                // Hoàn thành → tắt callback trước khi close
-                                _runningDialog.OnCancelled = null;
-                                _runningDialog?.SetCompleted();
-                                await Task.Delay(1500);
-                                _runningDialog?.Close();
-                                _runningDialog = null;
-                            }));
-
-                            txt_po.Focus();
-                            txt_po.SelectAll();
+                            }
                         }
                         else
                         {
-                            _ = new ToastNotification("Data trùng không cần chạy lại", LogType.Info)
+                            _ = new ToastNotification("PO " + po + " Không có công đoạn AirHole", LogType.Info)
                                     .ShowAndAutoClose();
-
-                            D = product.C_D ?? 0;
-                            L = product.C_L ?? 0;
-                            airHole = product.airhole ?? 0;
                         }
                     }
                     else
                     {
-                        _ = new ToastNotification("PO " + po + " Không có công đoạn AirHole", LogType.Info)
+                        // PO not found
+                        _ = new ToastNotification("Không tìm thấy Data: " + po, LogType.Error)
                                 .ShowAndAutoClose();
+                        txt_po.Clear();
+                        txt_po.Focus();
                     }
                 }
                 else
                 {
-                    // PO not found
-                    _ = new ToastNotification("Không tìm thấy Data: " + po, LogType.Error)
-                            .ShowAndAutoClose();
                     txt_po.Clear();
                     txt_po.Focus();
                 }
@@ -1400,16 +1421,15 @@ namespace back_stopper
 
         private void txt_id_employee_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
+            if (e.Key == Key.Enter || txt_id_employee.Text.Length>=5)
             {
-
                 string idEmployee = txt_id_employee.Text.Trim();
-                EmployeeData employee = Sql.GetEmployee(idEmployee);
+                employee = Sql.GetEmployee(idEmployee);
 
                 if (employee != null)
                 {
                     _ = new ToastNotification("Đăng nhập thành công, Xin Chào " + employee.name, LogType.Success)
-                .ShowAndAutoClose();
+                    .ShowAndAutoClose();
                     lb_check_emplyee.Text = "OK";
                     Log("Login Success ", LogType.Success);
                     //border_main.IsEnabled = true;
@@ -1417,11 +1437,9 @@ namespace back_stopper
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
                     Task.Delay(500);
-                    //connectPort(namePort);
-                    //ConnectContec();
                     var dialogConfirm = new ConfirmDialog(
                        message: "Bạn hãy Kiểm Tra gốc trước khi thao tác?",
-                       title: "Success",
+                       title: $"Chào! {employee.name}",
                        type: DialogType.Confirm);
                     dialogConfirm.Owner = this;
                     dialogConfirm.ShowDialog();
@@ -1445,8 +1463,6 @@ namespace back_stopper
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#DC2626"));
                     lb_check_emplyee.Text = "NO";
-                    //_ = new ToastNotification("ID của bạn chưa đúng thử lại nhé <3 " + employee.name, LogType.Success)
-                    //.ShowAndAutoClose();
                 }
             }
         }
@@ -1483,6 +1499,7 @@ namespace back_stopper
             txt_l.Text = "";
             txt_d.Text = "";
             txt_airhole.Text = "";
+
             //D = 0;
             //L = 0;
             //airHole = 0;
@@ -1543,8 +1560,6 @@ namespace back_stopper
         }
         private void num_step_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double?> e)
         {
-            //int.TryParse(num_step.Value.ToString(), out int n);
-            //Post_Master = n;
             GetValueStep();
         }
 
@@ -1690,14 +1705,14 @@ namespace back_stopper
 
         private void DisnableScreen()
         {
-            border_employee.IsEnabled = false;
+            //border_employee.IsEnabled = false;
             border_control.IsEnabled = false;
             border_main.IsEnabled = false;
         }
 
         private void EnableScreen()
         {
-            border_employee.IsEnabled = true;
+            //border_employee.IsEnabled = true;
             border_control.IsEnabled = true;
             border_main.IsEnabled = true;
         }
@@ -1767,7 +1782,7 @@ namespace back_stopper
         {
            
         // Trong vòng while của readinputloop, thay dòng OutBit cũ bằng:
-                _blinkCounter++;
+         _blinkCounter++;
 
         switch (_lightState)
         {

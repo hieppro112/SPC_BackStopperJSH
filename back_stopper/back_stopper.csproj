@@ -27,7 +27,7 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>43</ApplicationRevision>
+    <ApplicationRevision>58</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -123,11 +123,17 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="Model\BlinkSource.cs" />
+    <Compile Include="NumericKeyboard.xaml.cs">
+      <DependentUpon>NumericKeyboard.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="RestartingDialog.xaml.cs">
+      <DependentUpon>RestartingDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="RunningDialog.xaml.cs">
       <DependentUpon>RunningDialog.xaml</DependentUpon>
     </Compile>
-    <Compile Include="TwoHandDialog.xaml.cs">
-      <DependentUpon>TwoHandDialog.xaml</DependentUpon>
+    <Compile Include="ToastNotification.xaml.cs">
+      <DependentUpon>ToastNotification.xaml</DependentUpon>
     </Compile>
     <Page Include="ConfirmDialog.xaml">
       <SubType>Designer</SubType>
@@ -149,7 +155,15 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="NumericKeyboard.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="PasswordDialog.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="RestartingDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -157,7 +171,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="TwoHandDialog.xaml">
+    <Page Include="ToastNotification.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

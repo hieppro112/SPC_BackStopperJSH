@@ -16,6 +16,9 @@ namespace back_stopper.Model
         public double? C_D { get; set; }
         public double? C_L { get; set; }
         public double? airhole { get; set; }
+        public double? airhole_to_low { get; set; }
+        public double? airhole_to_up { get; set; }
+
 
     }
 }

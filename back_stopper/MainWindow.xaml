@@ -69,7 +69,7 @@
             </Grid.RowDefinitions>
 
             <!-- EMPLOYEE PANEL -->
-            <Border Grid.Row="0"
+            <Border Grid.Row="0" IsEnabled="True"
                     x:Name="border_employee"
                     Background="White" CornerRadius="20" Padding="20" Margin="0,0,0,20">
                 <Border.Effect>
@@ -88,12 +88,12 @@
                     </StackPanel>
 
                     <Border Grid.Column="1" Background="#F5F7FB" CornerRadius="12" Margin="20,0">
-                        <TextBox x:Name="txt_id_employee"
+                        <TextBox x:Name="txt_id_employee" InputScope="Number"
                                  Height="45" FontSize="20" BorderThickness="0"
                                  Background="Transparent" Padding="15,0"
                                  VerticalContentAlignment="Center" Foreground="#333"
                                  KeyDown="txt_id_employee_KeyDown"
-                                 controls:TextBoxHelper.Watermark="Nhập mã số NV tại đây"/>
+                                 controls:TextBoxHelper.Watermark="Nhập mã số NV tại đây" />
                     </Border>
 
                     <!-- NÚT TOGGLE PANEL -->
@@ -294,7 +294,7 @@
                             <ColumnDefinition Width="150"/>
                         </Grid.ColumnDefinitions>
                         <Border x:Name="border_txt_po" Background="#F5F7FB" CornerRadius="12" Margin="0,0,15,0">
-                            <TextBox x:Name="txt_po"
+                            <TextBox x:Name="txt_po" InputScope="Number"
                          Height="45" FontSize="25" BorderThickness="0"
                          Background="#F5F7FB" Padding="15,0"
                          VerticalContentAlignment="Center" Foreground="#333"
@@ -465,14 +465,14 @@
                     <WrapPanel  Orientation="Horizontal" Margin="0,0,0,10">
                         <Border Style="{StaticResource InfoCard}" MinWidth="85">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource LabelHeader}" Text="Sensor Min"/>
-                                <TextBlock x:Name="txt_ss1" Text="OFF" FontSize="17" FontWeight="Bold" Foreground="#DC2626"/>
+                                <TextBlock Style="{StaticResource LabelHeader}" Text="Sensor Min" FontSize="20"/>
+                                <TextBlock x:Name="txt_ss1" Text="OFF" FontSize="20" FontWeight="Bold" Foreground="#DC2626"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource InfoCard}" MinWidth="85">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource LabelHeader}" Text="Sensor Max"/>
-                                <TextBlock x:Name="txt_ss2" Text="OFF" FontSize="17" FontWeight="Bold" Foreground="#DC2626"/>
+                                <TextBlock Style="{StaticResource LabelHeader}" Text="Sensor Max" FontSize="20"/>
+                                <TextBlock x:Name="txt_ss2" Text="OFF" FontSize="20" FontWeight="Bold" Foreground="#DC2626"/>
                             </StackPanel>
                         </Border>
 
@@ -626,7 +626,7 @@
 
                                     <controls:NumericUpDown
                                         x:Name="num_step"
-                                        Value="2" Minimum="0.00001" Maximum="10" Interval="0.1"
+                                        Value="2" Minimum="0" Maximum="10" Interval="0.1"
                                         FontSize="30" FontWeight="SemiBold" Foreground="#4F46E5"
                                         Height="70" BorderThickness="1.5" Margin="0,0,0,16"
                                         controls:TextBoxHelper.Watermark="Step"
