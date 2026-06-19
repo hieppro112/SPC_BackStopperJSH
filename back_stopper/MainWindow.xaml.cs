@@ -31,11 +31,10 @@ namespace back_stopper
     /// </summary>
     public partial class MainWindow : MetroWindow
     {
-        //doi tuong man hinh ban phim 
-        private NumericKeyboard _numericKeyboard;
+        private double ofset_number;
         //doi nhan vien 
         EmployeeData employee;
-        //status drill và nút êmrgy
+        //status drill và nút emergy
         private bool checkon_emg = false;
         private bool checkon_taynam = false;
         //value stopper den origin 
@@ -96,6 +95,13 @@ namespace back_stopper
 
         //bien luu trang thai tay cam 
         private byte temp_taycam;
+
+        //effect light
+        private enum LightState { Off, Blinking, On }
+        private LightState _lightState = LightState.Off;
+        private int _blinkCounter = 0; // đếm vòng lặp để nháy
+
+        private bool isBlink = true;
         public MainWindow()
         {
             InitializeComponent();
@@ -124,7 +130,9 @@ namespace back_stopper
             StartReadInput();
             string s_stopper = GetServoPortFromConfig("size_backstopper");
             double.TryParse(s_stopper, out n_stopper);
-
+            string s_ofset = GetServoPortFromConfig("offset");
+            double.TryParse(s_ofset, out ofset_number);
+            Console.WriteLine("offset: "+ofset_number);
         }
 
 
@@ -462,6 +470,7 @@ namespace back_stopper
                
             }
         }
+
         private async Task MoveToAsync(double pos,double? speedS=null)
         {
             if (!serialPort.IsOpen)
@@ -519,7 +528,7 @@ namespace back_stopper
             {
                 isMoving = false;
                 //kiem tra dung vi tri chay chua 
-                check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 505) && (Math.Abs(pos_target - curren_postion) >= 0);
+                check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 5) && (Math.Abs(pos_target - curren_postion) >= 0);
                 Console.WriteLine("pos: " + pos_target + "curr pos " + curren_postion + "result: "+check_pos_for_relay);
 
                 if (check_pos_for_relay)
@@ -542,7 +551,6 @@ namespace back_stopper
                 return;
 
             isRestarting = true;
-
             try
             {
                 StartBlinkServoPanel(LogType.Warning);
@@ -573,7 +581,7 @@ namespace back_stopper
                 Convert.ToInt32(curren_postion + Post_Master);
             check_pos_for_relay = pos == pos_target;
            
-            await MoveToAsync(pos);
+            await MoveToAsync(pos,speedS:40);
             //await MoveToAsync(pos - 2000);
         }
 
@@ -582,7 +590,7 @@ namespace back_stopper
             int pos =
                 Convert.ToInt32(curren_postion - Post_Master);
             check_pos_for_relay = pos == pos_target;
-            await MoveToAsync(pos);
+            await MoveToAsync(pos,speedS:40);
         }
         #endregion
 
@@ -792,12 +800,6 @@ namespace back_stopper
                     _runningDialog = null;
                 }
 
-                // Clear data
-                //txt_PSTX.Text = "";
-                //txt_gamng.Text = "";
-                //txt_l.Text = "";
-                //txt_d.Text = "";
-                //txt_airhole.Text = "";
                 airHole = 0;
                 L = 0;
                 D = 0;
@@ -829,7 +831,6 @@ namespace back_stopper
             // ==================================================
             // priority 1 : emergency
             // ==================================================
-
 
             int ret = cdio.Init($"{nameContect}", out m_Id);
             if (inemg == 1)
@@ -929,8 +930,7 @@ namespace back_stopper
         }
 
         private void HandleSensorMin(byte raw, ref bool isCheckStopMin, ref bool isCheckStopHome)
-        {
-            
+        {   
             bool on = raw == 0;
             if (on)
             {
@@ -941,6 +941,7 @@ namespace back_stopper
                     StopPort();
                     isCheckStopMin = true;
                     isCheckStopHome = false;
+                    _ = eventCancel("Đã chạm MIN! Hành trình đã bị dừng", LogType.Error);
                 }
             }
             else
@@ -1105,6 +1106,7 @@ namespace back_stopper
                 SolidColorBrush.ColorProperty,
                 animation);
         }
+
 
         private void StopBlinkServoPanel()
         {
@@ -1355,8 +1357,10 @@ namespace back_stopper
 
                                     double step_backblask = 2000 ;
                                     //double step_value = n +  (((product.airhole_to_low ?? 0) + (product.airhole_to_up ?? 0))/2) ;
-                                    double step_value = n - 300;
+                                    double step_value = n - (ofset_number*500);
                                     pos_target = step_value;
+
+                                    Console.WriteLine("step: " +n +"  "+ofset_number +  "   " +step_value);
                                     if (n >= curren_postion)
                                     {
                                         await MoveToWithSignalCheckAsync(step_value, 0, token);
@@ -1703,7 +1707,62 @@ namespace back_stopper
             txt_po.SelectAll();
         }
 
-        private void DisnableScreen()
+
+        private void btn_reconnect_Click(object sender, RoutedEventArgs e)
+        {
+            _ = new ToastNotification("Kết nối lại", LogType.Info)
+                                 .ShowAndAutoClose();
+            connectPort(namePort);
+            ConnectContec();
+        }
+
+       
+
+        private void xuly_light_touch()
+        {
+           
+        // Trong vòng while của readinputloop, thay dòng OutBit cũ bằng:
+         _blinkCounter++;
+
+        switch (_lightState)
+        {
+            case LightState.Off:
+                cdio.OutBit(m_Id, 2, 0);
+                break;
+
+            case LightState.On:
+                cdio.OutBit(m_Id, 2, 1);
+                break;
+
+            case LightState.Blinking:
+                // Nháy mỗi 5 vòng lặp (~500ms tùy tốc độ loop)
+                cdio.OutBit(m_Id, 2, (byte) (_blinkCounter % 10 < 5 ? 1 : 0));
+                break;
+            }
+        }
+
+        private void turnOn_blink_statusServo()
+        {
+            Storyboard blink =
+            (Storyboard)txt_status_servo.Resources["BlinkStoryboard"];
+
+            blink.Begin(txt_status_servo, true);
+
+            isBlink = false;
+        }
+
+        private void turnOff_blink_statusServo()
+        {
+            Storyboard blink =
+    (Storyboard)txt_status_servo.Resources["BlinkStoryboard"];
+
+            blink.Stop(txt_status_servo);
+            isBlink = true;
+            //txt_status_servo.Opacity = 1;
+        }
+        
+        #region Control screen
+                private void DisnableScreen()
         {
             //border_employee.IsEnabled = false;
             border_control.IsEnabled = false;
@@ -1717,15 +1776,10 @@ namespace back_stopper
             border_main.IsEnabled = true;
         }
 
-        private void btn_reconnect_Click(object sender, RoutedEventArgs e)
-        {
-            _ = new ToastNotification("Kết nối lại", LogType.Info)
-                                 .ShowAndAutoClose();
-            connectPort(namePort);
-            ConnectContec();
-        }
+        #endregion
 
-        private void EventLight(LogType type, byte inEmg = 0 , byte in_tayCam = 1 , byte in_drill_water = 0)
+        #region effect blink touch and light
+         private void EventLight(LogType type, byte inEmg = 0 , byte in_tayCam = 1 , byte in_drill_water = 0)
         {
             //cac cong  den mau 
             short out_sc = 4;
@@ -1772,54 +1826,6 @@ namespace back_stopper
                 cdio.OutBit(m_Id, out_er, 0);
             }
         }
-
-
-        private enum LightState { Off, Blinking, On }
-        private LightState _lightState = LightState.Off;
-        private int _blinkCounter = 0; // đếm vòng lặp để nháy
-
-        private void xuly_light_touch()
-        {
-           
-        // Trong vòng while của readinputloop, thay dòng OutBit cũ bằng:
-         _blinkCounter++;
-
-        switch (_lightState)
-        {
-            case LightState.Off:
-                cdio.OutBit(m_Id, 2, 0);
-                break;
-
-            case LightState.On:
-                cdio.OutBit(m_Id, 2, 1);
-                break;
-
-            case LightState.Blinking:
-                // Nháy mỗi 5 vòng lặp (~500ms tùy tốc độ loop)
-                cdio.OutBit(m_Id, 2, (byte) (_blinkCounter % 10 < 5 ? 1 : 0));
-                break;
-            }
-        }
-
-        private bool isBlink = true;
-        private void turnOn_blink_statusServo()
-        {
-            Storyboard blink =
-            (Storyboard)txt_status_servo.Resources["BlinkStoryboard"];
-
-            blink.Begin(txt_status_servo, true);
-
-            isBlink = false;
-        }
-
-        private void turnOff_blink_statusServo()
-        {
-            Storyboard blink =
-    (Storyboard)txt_status_servo.Resources["BlinkStoryboard"];
-
-            blink.Stop(txt_status_servo);
-            isBlink = true;
-            //txt_status_servo.Opacity = 1;
-        }
+        #endregion
     }
 }
