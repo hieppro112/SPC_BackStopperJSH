@@ -79,7 +79,8 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="220"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="140"/>
                     </Grid.ColumnDefinitions>
 
@@ -93,11 +94,29 @@
                                  Background="Transparent" Padding="15,0"
                                  VerticalContentAlignment="Center" Foreground="#333"
                                  KeyDown="txt_id_employee_KeyDown"
-                                 controls:TextBoxHelper.Watermark="Nhập mã số NV tại đây" />
+                                 controls:TextBoxHelper.Watermark="Nhập mã số NV tại đây" GotFocus="txt_id_employee_GotFocus" LostFocus="txt_id_employee_LostFocus"/>
+                    </Border>
+
+                    <!-- COMBOBOX DÀNH CHO B?N -->
+                    <Border Grid.Column="2" Background="#F5F7FB" CornerRadius="12" Margin="0,0,10,0">
+                        <ComboBox x:Name="cmb_options" 
+                      Height="45" FontSize="18" 
+                      BorderThickness="0" 
+                      Background="Transparent" 
+                      VerticalContentAlignment="Center" 
+                      HorizontalContentAlignment="Center"
+                      SelectedIndex="1">
+                            <ComboBoxItem Content="1"/>
+                            <ComboBoxItem Content="1S"/>
+                            <ComboBoxItem Content="2"/>
+                            <ComboBoxItem Content="2S"/>
+                            <ComboBoxItem Content="3"/>
+                            <ComboBoxItem Content="ADM"/>
+                        </ComboBox>
                     </Border>
 
                     <!-- NÚT TOGGLE PANEL -->
-                    <Button Grid.Column="2"
+                    <Button Grid.Column="3"
                             x:Name="btn_toggle_panel"
                             Click="btn_toggle_panel_Click"
                             Width="42" Height="42"
@@ -127,7 +146,7 @@
                                    HorizontalAlignment="Center"/>
                     </Button>
 
-                    <TextBlock Grid.Column="3" x:Name="lb_check_emplyee"
+                    <TextBlock Grid.Column="4" x:Name="lb_check_emplyee"
                                Text="None" VerticalAlignment="Center" HorizontalAlignment="Center"
                                FontSize="22" FontWeight="SemiBold"/>
                 </Grid>
@@ -271,13 +290,13 @@
                                 <EventTrigger RoutedEvent="Loaded">
                                     <BeginStoryboard>
                                         <Storyboard RepeatBehavior="Forever"
-                            AutoReverse="True">
+                                            AutoReverse="True">
 
                                             <DoubleAnimation
-                        Storyboard.TargetProperty="Opacity"
-                        From="1"
-                        To="0.2"
-                        Duration="0:0:0.1"/>
+                                                Storyboard.TargetProperty="Opacity"
+                                                From="1"
+                                                To="0.2"
+                                                Duration="0:0:0.1"/>        
 
                                         </Storyboard>
                                     </BeginStoryboard>
@@ -306,7 +325,7 @@
                         <Button x:Name="btn_po_restart"
                     Click="btn_po_restart_Click" Content="Home"
                     Height="45" FontSize="20" FontWeight="SemiBold"
-                    Cursor="Hand" Foreground="White" Background="#FF2CD563" BorderThickness="0" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,-0.6,0.2" Width="151">
+                    Cursor="Hand" Foreground="White" Background="#54D0FA" BorderThickness="0" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,-0.6,0.2" Width="151">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border Background="{TemplateBinding Background}" CornerRadius="12">
@@ -383,15 +402,13 @@
                                    Text="Vui lòng, Kết nối servo" FontSize="25" FontWeight="Bold" Foreground="#2563EB">
                                     <TextBlock.Resources>
                                         <Storyboard x:Key="BlinkStoryboard"
-                    RepeatBehavior="Forever"
-                    AutoReverse="True">
-
+                                            RepeatBehavior="Forever"
+                                            AutoReverse="True">
                                             <DoubleAnimation
-                Storyboard.TargetProperty="Opacity"
-                From="1"
-                To="0.3"
-                Duration="0:0:0.3"/>
-
+                                                Storyboard.TargetProperty="Opacity"
+                                                From="1"
+                                                To="0.3"
+                                                Duration="0:0:0.3"/>            
                                         </Storyboard>
                                     </TextBlock.Resources>
                                 </TextBlock>
@@ -544,37 +561,6 @@
                 </Border>
 
                 <!-- MACHINE LOG -->
-                <!--<Border Grid.Row="4" Style="{StaticResource InfoCard}" Margin="5,0,5,10">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <TextBlock Text="Machine Log" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="#222" Margin="0,0,0,8"/>
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <ListBox x:Name="list_log"
-                                     BorderThickness="0"
-                                     Background="Transparent"
-                                     FontSize="13"
-                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                     VirtualizingPanel.IsVirtualizing="True"
-                                     VirtualizingPanel.VirtualizationMode="Recycling">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="White" CornerRadius="8" Padding="10" Margin="0,0,0,6">
-                                            <TextBlock Text="{Binding Message}"
-                                                       Foreground="{Binding Color}"
-                                                       FontWeight="SemiBold"
-                                                       TextWrapping="Wrap"/>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </ScrollViewer>
-                    </Grid>
-                </Border>-->
 
                 <!-- BUTTONS + FAB -->
                 <Grid Grid.Row="4" Margin="5,0,5,0">
@@ -582,20 +568,21 @@
                         <!--<ColumnDefinition Width="*"/>-->
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
 
 
-                    <Button x:Name="btn_restart" Grid.Column="0"
+                    <Button x:Name="btn_restart" Grid.Column="1"
                             Content="Clear Log" Click="btn_restart_Click"
                             Style="{StaticResource RoundBtn}"
                             Background="#FFF1B54A" Margin="0,0,10,0"/>
+                    <Button x:Name="btn_done" Grid.Column="0"
+                        Content="FINISH" Click="btn_done_Click"
+                        Style="{StaticResource RoundBtn}"
+                        Background="#5AE117" Margin="0,0,10,0"/>      
 
-                    <Button x:Name="btn_reconnect" Grid.Column="1"
-                            Content="Kết nối lại" Click="btn_reconnect_Click"
-                            Style="{StaticResource RoundBtn}"
-                            Background="#FF96F14A" Margin="0,0,10,0"/>
+
 
                     <Grid Grid.Column="2" VerticalAlignment="Center">
                         <Popup x:Name="popup_jog"
@@ -626,7 +613,8 @@
 
                                     <controls:NumericUpDown
                                         x:Name="num_step"
-                                        Value="2" Minimum="0" Maximum="10" Interval="0.1"
+                                        InputScope="Number"
+                                        Value="1" Minimum="0.01" Maximum="10" Interval="0.1"
                                         FontSize="30" FontWeight="SemiBold" Foreground="#4F46E5"
                                         Height="70" BorderThickness="1.5" Margin="0,0,0,16"
                                         controls:TextBoxHelper.Watermark="Step"
@@ -730,7 +718,8 @@
 
                         <Button x:Name="btn_fab"
                                 Click="btn_fab_Click"
-                                Width="52" Height="52"
+                                
+                                Width="120" Height="52"
                                 Cursor="Hand" ToolTip="Jog Control"
                                 Foreground="White" Background="#4F46E5" BorderThickness="0">
                             <Button.Template>

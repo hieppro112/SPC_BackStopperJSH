@@ -12,10 +12,10 @@ namespace back_stopper.Database
     class Sql
     {
         public static string connectionString { get; } = "Data Source=192.168.122.2;Initial Catalog=MANUFASPCPD;User ID=kuser;Password=SPC123@";
-
         //dl nhan vien
         public static string connection_Employee { get; } = @"Data Source=192.168.0.11;Initial Catalog=SGPrecision;User ID=hrmsadmin;Password=adminhrms;Max Pool Size=50;Application Name=Molybden_DL;";
         public static string query_id_get_name { get; } = "select [Name] from DataSPC where [Code] = @idNV";
+        private static string query_connect_data_history { get; } = "Data Source=192.168.122.2;Initial Catalog=F2Database;User ID=admin;Password=Buitanphat0201@";
 
         public static EmployeeData GetEmployee(string id)
         {
@@ -107,8 +107,8 @@ namespace back_stopper.Database
                             MatchCollection matches = Regex.Matches(reader["ProductName"]?.ToString(), @"\d+");
                             double.TryParse(matches[0].Value, out double d);
                             double.TryParse(matches[1].Value, out double l);
-                            double.TryParse(reader["AirHole_Tol_Low"]?.ToString(),out double ah_low);
-                            double.TryParse(reader["AirHole_Tol_Up"]?.ToString(),out double ah_up);
+                            double.TryParse(reader["AirHole_Tol_Low"]?.ToString(), out double ah_low);
+                            double.TryParse(reader["AirHole_Tol_Up"]?.ToString(), out double ah_up);
 
 
                             data = new productData
@@ -123,8 +123,8 @@ namespace back_stopper.Database
                                 ProductName = reader["ProductName"]?.ToString(),
 
                                 Pstx = reader["PSTX"]?.ToString(),
-                                C_D=d,
-                                C_L=l,
+                                C_D = d,
+                                C_L = l,
                                 airhole_to_low = ah_low,
                                 airhole_to_up = ah_up,
 
@@ -139,8 +139,35 @@ namespace back_stopper.Database
             return data;
         }
 
-        //lay min max
-       
+        //đưa dữ liệu vào history
+        public static void InsertDataHistory(string po, double ah, int origin_num, int indexNow, DateTime time, string msnv)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(query_connect_data_history))
+                {
+                    conn.Open();
+                    string query = "INSERT INTO [dbo].[F2_BackStopper_history]\r\n      " +
+                        "([AUFNR], [AH], [ORIGIN], [INDEX_NOW], [TIME_RUN], [MSNV])\r\n" +
+                        "VALUES (@po, @ah, @origin, @index, @time,@msnv)";
+                    using (SqlCommand cmd = new SqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@po", po);
+                        cmd.Parameters.AddWithValue("@ah", ah);
+                        cmd.Parameters.AddWithValue("@origin", origin_num);
+                        cmd.Parameters.AddWithValue("@index", indexNow);
+                        cmd.Parameters.AddWithValue("@time", time);
+                        cmd.Parameters.AddWithValue("@msnv", msnv);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine("Lỗi ex: "+ex);
+            }
+
+        }
     }
 }
 
