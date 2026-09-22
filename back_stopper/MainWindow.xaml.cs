@@ -1,12 +1,17 @@
-﻿using back_stopper.Database;
+﻿using AutoUpdaterDotNET;
+using back_stopper.Database;
 using back_stopper.Model;
 using CdioCs;
 using MahApps.Metro.Controls;
+using Microsoft.Playwright;
+using OpenQA.Selenium.Edge;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -21,8 +26,10 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using AutoUpdaterDotNET;
-using System.Diagnostics;
+using EdgeDriver = OpenQA.Selenium.Edge.EdgeDriver;
+using EdgeOptions = OpenQA.Selenium.Edge.EdgeOptions;
+using Selenium = OpenQA.Selenium;
+using WebDriverWait = OpenQA.Selenium.Support.UI.WebDriverWait;
 
 namespace back_stopper
 {
@@ -87,7 +94,7 @@ namespace back_stopper
         double pos_target = -99999999;
         SerialPort serialPort = new SerialPort();
         int Post_Master = 1000;
-        double curren_postion = 50;
+        double curren_postion = 57;
         double currenLoaded = 50;
 
         //gia tri stopper trong conffig
@@ -102,6 +109,9 @@ namespace back_stopper
         private int _blinkCounter = 0; // đếm vòng lặp để nháy
 
         private bool isBlink = true;
+
+        private int ret;//trang thai connect contect 
+        private string idEmployee = String.Empty;
         public MainWindow()
         {
             InitializeComponent();
@@ -528,7 +538,7 @@ namespace back_stopper
             {
                 isMoving = false;
                 //kiem tra dung vi tri chay chua 
-                check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 5) && (Math.Abs(pos_target - curren_postion) >= 0);
+                check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 160) && (Math.Abs(pos_target - curren_postion) >= 0);
                 Console.WriteLine("pos: " + pos_target + "curr pos " + curren_postion + "result: "+check_pos_for_relay);
 
                 if (check_pos_for_relay)
@@ -600,7 +610,7 @@ namespace back_stopper
             try
             {
                 nameContect = GetServoPortFromConfig("Name_Contect");
-                int ret = cdio.Init($"{nameContect}", out m_Id);
+                ret = cdio.Init($"{nameContect}", out m_Id);
                 if (ret == (int)CdioConst.DIO_ERR_SUCCESS)
                 {
                     cts = new CancellationTokenSource();
@@ -642,7 +652,7 @@ namespace back_stopper
             ioTask =  readinputloop(cts.Token);
         }
 
-
+        bool check_focus_id = false;
         private async Task readinputloop(CancellationToken token)
         {
             bool ischeckstopmin = false;
@@ -652,6 +662,7 @@ namespace back_stopper
 
             while (!token.IsCancellationRequested)
             {
+                
                 // =========================
                 // Enable screen
                 // =========================
@@ -663,10 +674,7 @@ namespace back_stopper
                 // =========================
                 if (!serialPort.IsOpen)
                 {
-                    _ = Dispatcher.BeginInvoke(new Action(async () =>
-                           {
-                               StopPort();
-                           }));
+                   
                     txt_status_servo.Text = "Servo bị ngắt kết nối !!!";
                     SolidColorBrush brush =
                 new SolidColorBrush(Colors.Red);
@@ -681,36 +689,35 @@ namespace back_stopper
 
                 if (!(ret == (int)CdioConst.DIO_ERR_SUCCESS))
                 {
+                    StopPort();
                     ConnectContec();
                 }
 
-               
                 pauseEvent.Wait();
 
                 // =========================
                 // read input
                 // =========================
                 cdio.InpBit(m_Id, 2, out byte inmin);
-                cdio.InpBit(m_Id, 0, out byte inmax);
+                cdio.InpBit(m_Id, 1, out byte inmax);
                 cdio.InpBit(m_Id, 4, out byte in_taynam);
                 cdio.InpBit(m_Id, 3, out byte in_drill_water);
                 cdio.InpBit (m_Id, 5, out byte inemg);
                 cdio.InpBit (m_Id, 6, out byte inTouch);
 
+                //gia thong so max
+                //inmax = (inmax == 0) ? (byte)1 : (byte)0;
+
                 //temp 
                 
                 temp_taycam = in_taynam;
 
-                cdio.EchoBackByte(m_Id, 0, out byte state);
+                 cdio.EchoBackByte(m_Id, 0, out byte state);
                 stateRelay = state;
 
 
                 xuly_light_touch();
 
-                //cdio.OutBit(m_Id, 2, 0);
-                //cdio.OutBit(m_Id, 3, 0);
-                //cdio.OutBit(m_Id, 4, 1);
-                //cdio.OutBit(m_Id, 5, 0);
                 byte value;
                 cdio.EchoBackBit(m_Id, 2, out value);
                 status_touch = inTouch;
@@ -722,10 +729,7 @@ namespace back_stopper
                 outRelay = (inemg == 0 && check_pos_for_relay)
                     ? 1
                     : 0;
-                //console.writeline("out relay: "+outrelay );
 
-                //check relay hoat dong nhun khoan va nuuoc off
-                
 
                 Event_relay();
                 handle_Relay();
@@ -750,27 +754,30 @@ namespace back_stopper
                 _ = XylyCambien(inemg,in_taynam,ret);
 
                 
-                await Dispatcher.InvokeAsync(() =>
+                if(ret == (int)CdioConst.DIO_ERR_SUCCESS)
                 {
-                    HandleSensorMin(
-                        inmin,
-                        ref ischeckstopmin,
-                        ref ischeckstophome);
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        HandleSensorMin(
+                            inmin,
+                            ref ischeckstopmin,
+                            ref ischeckstophome);
 
-                    HandleSensorMax(
-                        inmax,
-                        ref ischeckstopmax);
+                        HandleSensorMax(
+                            inmax,
+                            ref ischeckstopmax);
 
-                    HandleSensorHome(
-                        in_taynam,
-                        ref ischeckstophome);
+                        HandleSensorHome(
+                            in_taynam,
+                            ref ischeckstophome);
 
-                    HandleAlarm(
-                        inmin,
-                        inmax,
-                        state);
+                        HandleAlarm(
+                            inmin,
+                            inmax,
+                            state);
 
-                });
+                    });
+                }
 
                 await Task.Delay(50);
             }
@@ -917,6 +924,7 @@ namespace back_stopper
             await Task.Delay(50);
 
             string response = serialPort.ReadLine();
+            Console.WriteLine("response: " + response);
 
             Match match =
                 Regex.Match(response, @"Ux\.1=(\d+)");
@@ -934,11 +942,10 @@ namespace back_stopper
             bool on = raw == 0;
             if (on)
             {
-               
                 if (!serialPort.IsOpen) return;
                 if (!isCheckStopMin)
                 {
-                    StopPort();
+                    //StopPort();
                     isCheckStopMin = true;
                     isCheckStopHome = false;
                     _ = eventCancel("Đã chạm MIN! Hành trình đã bị dừng", LogType.Error);
@@ -990,15 +997,29 @@ namespace back_stopper
             {
                 AlarmSound.PlayAlarm();
                 //BlinkLabel("OVER LIMIT !!!", txt_notify);
-                _ = (in0 == 1) ?
-                          btn_start.IsEnabled = false :
+                _ = (in0 == 1) ? btn_start.IsEnabled = false
+                           : 
                           btn_Stop.IsEnabled = false;
+                if (in0 == 1)
+                {
+                    btn_start.IsEnabled = false;
+                    border_txt_po.IsEnabled = false;
+                    btn_po_restart.IsEnabled = false;
+                }
+                else
+                {
+                    border_txt_po.IsEnabled = false;
+                    btn_po_restart.IsEnabled = false;
+                    btn_Stop.IsEnabled = false;
+                }
             }
             else
             {
                 AlarmSound.Stop();
                 btn_start.IsEnabled = true;
                 btn_Stop.IsEnabled = true;
+                border_txt_po.IsEnabled = true;
+                btn_po_restart.IsEnabled = true;
             }
         
         }
@@ -1053,6 +1074,8 @@ namespace back_stopper
 
             //tat relay
             cdio.OutBit(m_Id, 0, 0);
+            //cdio.OutBit(m_Id, 0, 1
+
 
             //tat den cua nut 
             cdio.OutBit(m_Id, 2, 0);
@@ -1353,7 +1376,7 @@ namespace back_stopper
                                     };
 
                                     _runningDialog.Show();
-                                    StartBlinkServoPanel(LogType.Warning);
+                                    //StartBlinkServoPanel(LogType.Warning);
 
                                     double step_backblask = 2000 ;
                                     //double step_value = n +  (((product.airhole_to_low ?? 0) + (product.airhole_to_up ?? 0))/2) ;
@@ -1363,7 +1386,7 @@ namespace back_stopper
                                     Console.WriteLine("step: " +n +"  "+ofset_number +  "   " +step_value);
                                     if (n >= curren_postion)
                                     {
-                                        await MoveToWithSignalCheckAsync(step_value, 0, token);
+                                        await MoveToWithSignalCheckAsync(step_value, 50, token);
                                     }
                                     else if (n < curren_postion)
                                     {
@@ -1374,7 +1397,7 @@ namespace back_stopper
                                     // Bị hủy giữa chừng → không làm gì thêm
                                     if (token.IsCancellationRequested) return;
 
-                                    StopBlinkServoPanel();
+                                    //StopBlinkServoPanel();
                                     prev_post = startPos;
                                     D = product.C_D ?? 0;
                                     L = product.C_L ?? 0;
@@ -1386,6 +1409,28 @@ namespace back_stopper
                                     await Task.Delay(1500);
                                     _runningDialog?.Close();
                                     _runningDialog = null;
+
+                                    //tự động nhập PO
+                                    var dialogConfirm = new ConfirmDialog(
+                                          message: "Bắt đầu thực hiện AUTO PO?",
+                                          title: $"Chào! {employee.name}",
+                                          type: DialogType.Confirm);
+                                    dialogConfirm.Owner = this;
+                                    dialogConfirm.ShowDialog();
+
+                                    if (dialogConfirm.IsConfirmed)
+                                    {
+                                        AutoControl(txt_po.Text);
+                                    }
+                                    else
+                                    {
+                                        txt_po.SelectAll();
+                                        txt_po.Focus();
+                                    }
+
+                                    //đưa dữ liệu hiện tại vào dtb
+                                    Sql.InsertDataHistory(txt_po.Text, product.airhole??0.0, Set_origin_number??0, int.Parse(curren_postion.ToString()), DateTime.Now,idEmployee);
+
                                 }));
 
                                 txt_po.Focus();
@@ -1395,6 +1440,22 @@ namespace back_stopper
                             {
                                 _ = new ToastNotification("Data trùng không cần chạy lại", LogType.Info)
                                         .ShowAndAutoClose();
+                                var dialogConfirm = new ConfirmDialog(
+                                          message: "Bắt đầu thực hiện AUTO PO?",
+                                          title: $"Chào! {employee.name}",
+                                          type: DialogType.Confirm);
+                                    dialogConfirm.Owner = this;
+                                    dialogConfirm.ShowDialog();
+
+                                    if (dialogConfirm.IsConfirmed)
+                                    {
+                                        AutoControl(txt_po.Text);
+                                    }
+                                    else
+                                    {
+                                        txt_po.SelectAll();
+                                        txt_po.Focus();
+                                    }
                                 D = product.C_D ?? 0;
                                 L = product.C_L ?? 0;
                                 airHole = product.airhole ?? 0;
@@ -1423,15 +1484,40 @@ namespace back_stopper
             }
         }
 
+        private void AutoControl(string input_po)
+        {
+            event_auto_web(employee.id,input_po);
+            event_auto_app(input_po);
+        }
+
         private void txt_id_employee_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter || txt_id_employee.Text.Length>=5)
+            if (e.Key == Key.Enter)
             {
-                string idEmployee = txt_id_employee.Text.Trim();
+                idEmployee = txt_id_employee.Text.Trim();
                 employee = Sql.GetEmployee(idEmployee);
+                //event_auto_web_click_button();
+                //tự động nhập PO
+
 
                 if (employee != null)
                 {
+                    var dialogConfirm2 = new ConfirmDialog(
+                                          message: "Bắt đầu thực hiện AUTO PO?",
+                                          title: $"Chào! {employee.name}",
+                                          type: DialogType.Confirm);
+                    dialogConfirm2.Owner = this;
+                    dialogConfirm2.ShowDialog();
+
+                    if (dialogConfirm2.IsConfirmed)
+                    {
+                        AutoControl("520006648960");
+                    }
+                    else
+                    {
+                        txt_po.SelectAll();
+                        txt_po.Focus();
+                    }
                     _ = new ToastNotification("Đăng nhập thành công, Xin Chào " + employee.name, LogType.Success)
                     .ShowAndAutoClose();
                     lb_check_emplyee.Text = "OK";
@@ -1441,21 +1527,33 @@ namespace back_stopper
                     new SolidColorBrush(
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
                     Task.Delay(500);
-                    var dialogConfirm = new ConfirmDialog(
+
+                    txt_id_employee.Text = employee.name;
+                    txt_id_employee.Foreground = Brushes.BlueViolet;
+                    txt_id_employee.FontSize = 25;
+                    txt_id_employee.FontWeight = FontWeights.Bold;
+
+                    Keyboard.ClearFocus();
+
+
+                    if (ret == (int)CdioConst.DIO_ERR_SUCCESS && serialPort.IsOpen)
+                    {
+                       var dialogConfirm = new ConfirmDialog(
                        message: "Bạn hãy Kiểm Tra gốc trước khi thao tác?",
                        title: $"Chào! {employee.name}",
                        type: DialogType.Confirm);
-                    dialogConfirm.Owner = this;
-                    dialogConfirm.ShowDialog();
+                        dialogConfirm.Owner = this;
+                        dialogConfirm.ShowDialog();
 
-                    if (dialogConfirm.IsConfirmed)
-                    {
-                        Event_fab();
-                    }
-                    else
-                    {
-                        txt_po.Focus();
-                        txt_po.SelectAll();
+                        if (dialogConfirm.IsConfirmed)
+                        {
+                            Event_fab();
+                        }
+                        else
+                        {
+                            txt_po.Focus();
+                            txt_po.SelectAll();
+                        }
                     }
                 }
                 else
@@ -1555,11 +1653,17 @@ namespace back_stopper
         #endregion
         private void GetValueStep()
         {
-            double.TryParse(num_step.Value.ToString(), out double step);
+            //decimal.TryParse(, out decimal step);
+
+            double value = Math.Round(num_step.Value ?? 0, 1);
+
+            decimal step = (decimal)value;
+
             Post_Master = (int)(step * 500);
+
             if (txt_step_display != null)
             {
-                txt_step_display.Text = Post_Master.ToString() + " - " + step.ToString() + "mm";
+                txt_step_display.Text = Post_Master.ToString("F1") + " - " + step.ToString() + "mm";
             }
         }
         private void num_step_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double?> e)
@@ -1622,6 +1726,8 @@ namespace back_stopper
 
         private void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
         {
+            GetServoStatus();
+            //event_auto_web_click_button();
             if (_isPanelOpen)
             {
                 // Ẩn panel — animate Width về 0
@@ -1634,7 +1740,7 @@ namespace back_stopper
                 col_right.BeginAnimation(ColumnDefinition.WidthProperty, anim);
 
                 border_control.Visibility = Visibility.Collapsed;
-                txt_toggle_icon.Text = "◀";
+                //txt_toggle_icon.Text = "◀";
                 _isPanelOpen = false;
             }
             else
@@ -1650,7 +1756,7 @@ namespace back_stopper
                 };
                 col_right.BeginAnimation(ColumnDefinition.WidthProperty, anim);
 
-                txt_toggle_icon.Text = "▶";
+                //txt_toggle_icon.Text = "▶";
                 _isPanelOpen = true;
             }
         }
@@ -1827,5 +1933,199 @@ namespace back_stopper
             }
         }
         #endregion
+
+        private void txt_id_employee_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (employee == null) return;
+            txt_id_employee.Text = employee.id;
+            txt_id_employee.Foreground = Brushes.Black;
+            txt_id_employee.FontSize = 20;
+            txt_id_employee.FontWeight = FontWeights.Normal;
+        }
+
+        private void txt_id_employee_LostFocus(object sender, RoutedEventArgs e)
+        {
+
+            // Không được focus
+            if (employee == null) return;
+
+            txt_id_employee.Text = employee.name;
+            txt_id_employee.Foreground = Brushes.BlueViolet;
+            txt_id_employee.FontSize = 25;
+            txt_id_employee.FontWeight = FontWeights.Bold;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        private void event_auto_app(string numPO)
+        {
+            ////////////////////
+            //tiep tuc qua app 2 
+            ///////////////////
+            Process notepadProcess = null;
+            Process[] processes = Process.GetProcessesByName("WorkSupportSystem");//kiem tra xem co đang được mở sẵn không 
+
+            if (processes.Length > 0)
+            {
+                notepadProcess = processes[0];//lay luôn cửa sổ đầu tiên
+            }
+            else
+            {
+                //khởi động notepad
+                notepadProcess = Process.Start("WorkSupportSystem.exe");
+                notepadProcess.WaitForInputIdle(2000);
+            }
+
+            if (notepadProcess != null)
+            {
+                //để cửa sổ lên đầu
+                SetForegroundWindow(notepadProcess.MainWindowHandle);
+                System.Threading.Thread.Sleep(300);
+
+                System.Windows.Forms.SendKeys.SendWait("^a");      // Ctrl + A
+                Thread.Sleep(300);
+
+                System.Windows.Forms.SendKeys.SendWait("{DEL}");   // Xóa
+                Thread.Sleep(300);
+                System.Windows.Forms.SendKeys.SendWait(numPO);
+                System.Windows.Forms.SendKeys.SendWait("{ENTER}");
+                System.Threading.Thread.Sleep(300);
+
+            }
+        }
+
+        private void event_auto_web(string id,string s)
+        {
+            bool found_tab = false;
+            
+            try
+            {
+                string appFolder = AppDomain.CurrentDomain.BaseDirectory;
+                // 2. Ép Selenium sử dụng file msedgedriver.exe nằm ngay trong thư mục này
+                EdgeDriverService service = EdgeDriverService.CreateDefaultService(appFolder);
+                service.HideCommandPromptWindow = true;
+
+                EdgeOptions options = new EdgeOptions();//cau hinh edg 
+                options.DebuggerAddress = "127.0.0.1:9222";
+                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg 
+                Selenium.IWebDriver driver = new EdgeDriver(service, options);//cau hinh cho driver edg 
+
+                //lay cac cua so 
+                var windowHandles = driver.WindowHandles;
+                foreach (var handle in windowHandles)
+                {
+                    driver.SwitchTo().Window(handle);//chuyen sang tab
+                    //kiem tra title cua tab
+                    if (driver.Title.Contains("Supro Standby"))
+                    {
+                        found_tab = true;
+                        WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
+                        try
+                        {
+                            //Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("lblDebug")));//tim ô này
+                            //clickVer.Click();
+
+                            Selenium.IWebElement label_result = wait.Until(d => d.FindElement(Selenium.By.Id("lblDebug")));//tim ô này
+                            string s_result = label_result.Text;
+                            Console.WriteLine("s: " + s_result);
+
+                            for (int i = 0; i <= s_result.Length; i++)
+                            {
+                                driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Backspace);
+                                System.Threading.Thread.Sleep(50);
+
+                            }
+
+                            driver.SwitchTo().ActiveElement().SendKeys(s);
+                            System.Threading.Thread.Sleep(1000);
+                            driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Enter);
+                            System.Threading.Thread.Sleep(1000);
+                            this.Activate();
+                            return;
+                        }
+
+                        catch(Exception ex)
+                        {
+                            MessageBox.Show("Đã có lỗi xảy ra :"+ex);
+                            this.Activate();
+                        }
+                        finally
+                        {
+                            driver?.Quit();
+                            driver?.Dispose();
+                            service?.Dispose();
+                        }
+                    }
+                    else
+                    {
+                        this.Activate();
+                        MessageBox.Show("Không tìm  thấy cửa sổ " );
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Đã có lỗi xảy ra :" + ex);
+                this.Activate();
+            }
+        }
+
+
+
+        private void event_auto_web_click_button()
+        {
+            try
+            {
+                string appFolder = AppDomain.CurrentDomain.BaseDirectory;
+                //MessageBox.Show("App folder: " + appFolder);
+                // 2. Ép Selenium sử dụng file msedgedriver.exe nằm ngay trong thư mục này
+                EdgeDriverService service = EdgeDriverService.CreateDefaultService(appFolder);
+                service.HideCommandPromptWindow = true;
+
+                EdgeOptions options = new EdgeOptions();//cau hinh edg 
+                options.DebuggerAddress = "127.0.0.1:9222";
+                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg 
+                Selenium.IWebDriver driver = new EdgeDriver(service, options);//cau hinh cho driver edg 
+
+                //lay cac cua so 
+                var windowHandles = driver.WindowHandles;
+                foreach (var handle in windowHandles)
+                {
+                    driver.SwitchTo().Window(handle);//chuyen sang tab
+                    //kiem tra title cua tab
+                    if (driver.Title.Contains("Supro Processing"))
+                    {
+                        WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
+                        try
+                        {
+                            Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("btnPOFinish")));//tim ô này
+                            clickVer.Click();
+                            this.Activate();
+                        }
+
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("Đã có lỗi xảy ra :" + ex);
+                            this.Activate();
+                        }
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Đã có lỗi xảy ra :" + ex);
+                this.Activate();
+            }
+        }
+
+        private void btn_done_Click(object sender, RoutedEventArgs e)
+        {
+            event_auto_web_click_button();
+        }
     }
 }
