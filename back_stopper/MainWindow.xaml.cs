@@ -1,4 +1,5 @@
-﻿using back_stopper.Database;
+﻿using AutoUpdaterDotNET;
+using back_stopper.Database;
 using back_stopper.Model;
 using back_stopper.ViewModel;
 using CdioCs;
@@ -12,6 +13,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -549,7 +551,7 @@ namespace back_stopper
                  //read input
                  //=========================
                 cdio.InpBit(m_Id, 2, out byte inmin);
-                cdio.InpBit(m_Id, 0, out byte inmax);
+                cdio.InpBit(m_Id, 1, out byte inmax);
                 cdio.InpBit(m_Id, 4, out byte in_taynam);
                 cdio.InpBit(m_Id, 3, out byte in_drill_water);
                 cdio.InpBit(m_Id, 5, out byte inemg);
@@ -558,11 +560,14 @@ namespace back_stopper
                 //gia thong so max
                 //inmax = (inmax == 0) ? (byte)1 : (byte)0;
 
+                //gia thong so max
+                //inmax = (inmax == 0) ? (byte)1 : (byte)0;
+
                 //temp 
 
                 temp_taycam = in_taynam;
 
-                cdio.EchoBackByte(m_Id, 0, out byte state);
+                 cdio.EchoBackByte(m_Id, 0, out byte state);
                 stateRelay = state;
 
 
@@ -1885,7 +1890,6 @@ namespace back_stopper
                 System.Windows.Forms.SendKeys.SendWait("{DEL}");   // Xóa
                 Thread.Sleep(300);
                 System.Windows.Forms.SendKeys.SendWait(numPO);
-
                 System.Windows.Forms.SendKeys.SendWait("{ENTER}");
                 System.Threading.Thread.Sleep(300);
 

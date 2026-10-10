@@ -80,7 +80,8 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="220"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="140"/>
                     </Grid.ColumnDefinitions>
 
@@ -97,8 +98,26 @@
                                  controls:TextBoxHelper.Watermark="Nhập mã số NV tại đây" GotFocus="txt_id_employee_GotFocus" LostFocus="txt_id_employee_LostFocus"/>
                     </Border>
 
+                    <!-- COMBOBOX DÀNH CHO B?N -->
+                    <Border Grid.Column="2" Background="#F5F7FB" CornerRadius="12" Margin="0,0,10,0">
+                        <ComboBox x:Name="cmb_options" 
+                      Height="45" FontSize="18" 
+                      BorderThickness="0" 
+                      Background="Transparent" 
+                      VerticalContentAlignment="Center" 
+                      HorizontalContentAlignment="Center"
+                      SelectedIndex="1">
+                            <ComboBoxItem Content="1"/>
+                            <ComboBoxItem Content="1S"/>
+                            <ComboBoxItem Content="2"/>
+                            <ComboBoxItem Content="2S"/>
+                            <ComboBoxItem Content="3"/>
+                            <ComboBoxItem Content="ADM"/>
+                        </ComboBox>
+                    </Border>
+
                     <!-- NÚT TOGGLE PANEL -->
-                    <Button Grid.Column="2"
+                    <Button Grid.Column="3"
                             x:Name="btn_toggle_panel"
                             Click="btn_toggle_panel_Click"
                             Width="42" Height="42"
@@ -128,7 +147,7 @@
                                    HorizontalAlignment="Center"/>
                     </Button>
 
-                    <TextBlock Grid.Column="3" x:Name="lb_check_emplyee"
+                    <TextBlock Grid.Column="4" x:Name="lb_check_emplyee"
                                Text="None" VerticalAlignment="Center" HorizontalAlignment="Center"
                                FontSize="22" FontWeight="SemiBold"/>
                 </Grid>
