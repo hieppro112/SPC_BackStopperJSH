@@ -6,15 +6,16 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Windows.Markup;
 
 namespace back_stopper.Database
 {
     class Sql
     {
-        public static string connectionString { get; } = "Data Source=192.168.122.2;Initial Catalog=MANUFASPCPD;User ID=kuser;Password=SPC123@";
+        private static string connectionString { get; } = "Data Source=192.168.122.2;Initial Catalog=MANUFASPCPD;User ID=kuser;Password=SPC123@";
         //dl nhan vien
-        public static string connection_Employee { get; } = @"Data Source=192.168.0.11;Initial Catalog=SGPrecision;User ID=hrmsadmin;Password=adminhrms;Max Pool Size=50;Application Name=Molybden_DL;";
-        public static string query_id_get_name { get; } = "select [Name] from DataSPC where [Code] = @idNV";
+        private static string connection_Employee { get; } = @"Data Source=192.168.0.11;Initial Catalog=SGPrecision;User ID=hrmsadmin;Password=adminhrms;Max Pool Size=50;Application Name=Molybden_DL;";
+        private static string query_id_get_name { get; } = "select [Name] from DataSPC where [Code] = @idNV";
         private static string query_connect_data_history { get; } = "Data Source=192.168.122.2;Initial Catalog=F2Database;User ID=admin;Password=Buitanphat0201@";
 
         public static EmployeeData GetEmployee(string id)
@@ -54,8 +55,39 @@ namespace back_stopper.Database
             return data;
         }
 
+        //lay so luong don hang moi gio 
+        private static string query_get_Count_Po { get; } = @"
+              SELECT COUNT(DISTINCT AUFNR) AS SoLuongDonHang
+            FROM [F2Database].[dbo].[F2_BackStopper_history_main]
+            WHERE TIME_RUN >= DATEADD(HOUR, @Time_p, GETDATE())
+              AND TIME_RUN <= DATEADD(HOUR, @Time_n, GETDATE());";
+        public static int GetCountPO(int hour)
+        {
+            using (SqlConnection conn = new SqlConnection(query_connect_data_history))
+            {
+                conn.Open();
+
+                using (SqlCommand cmd = new SqlCommand(query_get_Count_Po, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Time_p", hour-1);
+                    cmd.Parameters.AddWithValue("@Time_n", hour);
+
+
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            int.TryParse(reader["SoLuongDonHang"]?.ToString(), out int sluong_po);
+                            return sluong_po;
+                        }
+                    }
+                }
+            }
+            return 0;
+        }
+
         //dl hang
-        public static string getDataforPo { get; } = @"
+        private static string getDataforPo { get; } = @"
             SELECT 
                 req.AUFNR,
                 req.GAMNG,
@@ -147,7 +179,7 @@ namespace back_stopper.Database
                 using (SqlConnection conn = new SqlConnection(query_connect_data_history))
                 {
                     conn.Open();
-                    string query = "INSERT INTO [dbo].[F2_BackStopper_history]\r\n      " +
+                    string query = "INSERT INTO [dbo].[F2_BackStopper_history_main]\r\n      " +
                         "([AUFNR], [AH], [ORIGIN], [INDEX_NOW], [TIME_RUN], [MSNV])\r\n" +
                         "VALUES (@po, @ah, @origin, @index, @time,@msnv)";
                     using (SqlCommand cmd = new SqlCommand(query, conn))

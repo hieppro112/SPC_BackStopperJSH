@@ -1,0 +1,156 @@
+﻿<Window x:Class="back_stopper.ErrorReportDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:back_stopper"
+        mc:Ignorable="d"
+        Title="Báo Cáo Lỗi Hệ Thống" 
+        Height="450" Width="420"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- Style cho Button Hủy (Màu đỏ/Hồng) -->
+        <Style x:Key="CancelButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#E63946"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BackBorder" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#F44336"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#C62828"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Style cho Button Gửi (Màu xanh lá) -->
+        <Style x:Key="SubmitButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#1DB954"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BackBorder" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#1ED760"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#1AA34A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Khung ngoài của Dialog -->
+    <Border Background="#FFFFFF" CornerRadius="12" BorderBrush="#313244" BorderThickness="1">
+        <Grid Margin="20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- Header -->
+                <RowDefinition Height="*"/>
+                <!-- Content -->
+                <RowDefinition Height="Auto"/>
+                <!-- Footer Buttons -->
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                <TextBlock Text="🚨 Báo Cáo Lỗi Hệ Thống" 
+                           FontSize="18" 
+                           FontWeight="Bold" 
+                           Foreground="#F10000" 
+                           HorizontalAlignment="Center"/>
+                <Separator Margin="0,12,0,0" Background="#313244"/>
+            </StackPanel>
+
+            <!-- 2. Form Nội Dung -->
+            <StackPanel Grid.Row="1">
+                <!-- Chọn Loại Lỗi -->
+                <TextBlock Text="📋 Loại Lỗi" Foreground="#000000" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ComboBox x:Name="cboErrorType" 
+                          Height="36" 
+                          SelectedIndex="0"
+                          Background="#FFFFFF" 
+                          Foreground="#000000" 
+                          FontSize="13"
+                          Padding="10,6">
+                    <ComboBoxItem Content="🖥️ Máy hỏng / Máy lỗi"/>
+                    <ComboBoxItem Content="⚙️ Lỗi phần mềm / Giao diện"/>
+                    <ComboBoxItem Content="🌐 Mất kết nối mạng / CSDL"/>
+                    <ComboBoxItem Content="❓ Lỗi khác"/>
+                </ComboBox>
+
+                <!-- Chi Tiết Lỗi -->
+                <TextBlock Text="📝 Chi Tiết Lỗi" Foreground="#000000" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,6"/>
+                <Border Background="#FFFFFF" CornerRadius="6" BorderBrush="#45475A" BorderThickness="1">
+                    <TextBox x:Name="txtErrorDetail" 
+                             Height="140" 
+                             TextWrapping="Wrap" 
+                             AcceptsReturn="True"
+                             MaxLength="500"
+                             Background="Transparent" 
+                             Foreground="#CDD6F4" 
+                             CaretBrush="#CDD6F4"
+                             BorderThickness="0" 
+                             Padding="10"
+                             VerticalScrollBarVisibility="Auto"
+                             TextChanged="txtErrorDetail_TextChanged"/>
+                </Border>
+
+                <!-- Đếm Ký Tự -->
+                <TextBlock x:Name="lblCharCount" 
+                           Text="Ký tự: 0 / 500" 
+                           Foreground="#000000" 
+                           FontSize="11" 
+                           HorizontalAlignment="Right" 
+                           Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <!-- 3. Footer (Nút Hủy / Gửi) -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                <Button x:Name="btnCancel" 
+                        Content="❌ Hủy" 
+                        Style="{StaticResource CancelButtonStyle}" 
+                        Margin="0,0,10,0" 
+                        Click="btnCancel_Click"/>
+
+                <Button x:Name="btnSubmit" 
+                        Content="✓ Gửi" 
+                        Style="{StaticResource SubmitButtonStyle}" 
+                        Click="btnSubmit_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
