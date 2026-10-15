@@ -147,7 +147,7 @@ namespace back_stopper
             int.TryParse(GetServoPortFromConfig("speed_servo"), out int sp_sv);
             speed_servo = sp_sv;
 
-            myServo.SetSoftLimit(lm_max,lm_min);
+            
             //myModBus.limit();
             Console.WriteLine("offset: " + ofset_number);
         }
@@ -228,6 +228,7 @@ namespace back_stopper
                         (Color)ColorConverter.ConvertFromString("#16A34A"));
                     Log("Mortor OK", LogType.Success);
                     //EnableScreen();
+                    myServo.SetSoftLimit(lm_max, lm_min);
                     turnOff_blink_statusServo();
                     ConnectContec();
                 }
@@ -325,8 +326,6 @@ namespace back_stopper
                 // yêu cầu position mới
                 curren_postion = myServo.ReadPosition();
                 //lấy tải trọng 
-                //SendCommand("?79");
-                //SendCommand("?98");
 
                 await Task.Delay(100);
 
@@ -437,9 +436,6 @@ namespace back_stopper
             check_pos_for_relay = Math.Abs(pos_target - pos) < 1510;
 
             await myServo.MoveRelative(Post_Master, (ushort)300);
-
-            //await MoveToAsync(pos,speedS:40);
-            //await MoveToAsync(pos - 2000);
         }
 
         private async Task PrevPortAsync()
@@ -1369,9 +1365,9 @@ namespace back_stopper
             }
         }
 
-        private void AutoControl(string input_po)
+        private async void AutoControl(string input_po)
         {
-            event_auto_web(input_po);
+            await event_auto_web(input_po);
             event_auto_app(input_po);
         }
 
@@ -1614,10 +1610,10 @@ namespace back_stopper
         #region xu ly slide bar
         private bool _isPanelOpen = true;
 
-        private void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
+        private async void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
         {
             //GetServoStatus();
-            //event_auto_web_click_button();
+            //await event_auto_web();
             if (_isPanelOpen)
             {
                 // Ẩn panel — animate Width về 0
@@ -1892,7 +1888,7 @@ namespace back_stopper
             }
         }
 
-        private void event_auto_web(string s)
+        private async Task event_auto_web(string s)
         {
             bool found_tab = false;
 
@@ -1928,7 +1924,7 @@ namespace back_stopper
                             string s_result = label_result.Text;
                             Console.WriteLine("s: " + s_result);
 
-                            for (int i = 0; i <= s_result.Length; i++)
+                            for (int i = 0; i < s_result.Length; i++)
                             {
                                 driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Backspace);
                                 System.Threading.Thread.Sleep(50);
@@ -1990,7 +1986,7 @@ namespace back_stopper
                 {
                     driver.SwitchTo().Window(handle);//chuyen sang tab
                     //kiem tra title cua tab
-                    if (driver.Title.Contains("Supro Processing"))
+                    if (driver.Title.Contains("Supro Standby"))
                     {
                         WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
                         try

@@ -82,7 +82,11 @@ namespace Servoleadshine.Client
 
         public void WriteSingleRegister(ushort address, ushort value)
         {
-            if (!IsConnected) MessageBox.Show("Thiết bị chưa được kết nối");
+            if (!IsConnected)
+            {
+                MessageBox.Show("Thiết bị chưa được kết nối");
+                return;
+            } 
 
             try
             {
