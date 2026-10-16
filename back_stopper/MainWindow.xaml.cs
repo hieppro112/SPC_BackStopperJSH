@@ -54,7 +54,7 @@ namespace back_stopper
         public int? Set_origin_number = 0;
         //gioi han khong cho servo chay ra khoi 
         int lm_min = -30000;
-        int lm_max = 400000;
+        int lm_max = 450000;
         //bien dung lock khong cho cmd chay
         private readonly object serialLock = new object();
 
@@ -1614,6 +1614,7 @@ namespace back_stopper
         {
             //GetServoStatus();
             //await event_auto_web();
+            event_auto_app("520006648961");
             if (_isPanelOpen)
             {
                 // Ẩn panel — animate Width về 0
@@ -1891,133 +1892,148 @@ namespace back_stopper
         private async Task event_auto_web(string s)
         {
             bool found_tab = false;
+            EdgeDriverService service = null;
+            Selenium.IWebDriver driver = null;
 
             try
             {
                 string appFolder = AppDomain.CurrentDomain.BaseDirectory;
                 //MessageBox.Show("App folder: " + appFolder);
                 // 2. Ép Selenium sử dụng file msedgedriver.exe nằm ngay trong thư mục này
-                EdgeDriverService service = EdgeDriverService.CreateDefaultService(appFolder);
+                service = EdgeDriverService.CreateDefaultService(appFolder);
                 service.HideCommandPromptWindow = true;
 
-                EdgeOptions options = new EdgeOptions();//cau hinh edg 
+                EdgeOptions options = new EdgeOptions();//cau hinh edg
                 options.DebuggerAddress = "127.0.0.1:9222";
-                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg 
-                Selenium.IWebDriver driver = new EdgeDriver(service, options);//cau hinh cho driver edg 
+                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg
+                driver = new EdgeDriver(service, options);//cau hinh cho driver edg
 
-                //lay cac cua so 
+                //lay cac cua so
                 var windowHandles = driver.WindowHandles;
                 foreach (var handle in windowHandles)
                 {
                     driver.SwitchTo().Window(handle);//chuyen sang tab
                     //kiem tra title cua tab
-                    if (driver.Title.Contains("Supro Standby"))
+                    if (!driver.Title.Contains("Supro Standby"))
+                        continue;
+
+                    found_tab = true;
+                    WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
+                    try
                     {
-                        found_tab = true;
-                        WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
-                        try
+                        Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("formMask")));//tim ô này
+                        clickVer.Click();
+
+                        Selenium.IWebElement label_result = wait.Until(d => d.FindElement(Selenium.By.Id("lblDebug")));//tim ô này
+                        string s_result = label_result.Text;
+                        Console.WriteLine("s: " + s_result);
+
+                        for (int i = 0; i < s_result.Length; i++)
                         {
-                            Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("formMask")));//tim ô này
-                            clickVer.Click();
+                            driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Backspace);
+                            System.Threading.Thread.Sleep(50);
 
-                            Selenium.IWebElement label_result = wait.Until(d => d.FindElement(Selenium.By.Id("lblDebug")));//tim ô này
-                            string s_result = label_result.Text;
-                            Console.WriteLine("s: " + s_result);
-
-                            for (int i = 0; i < s_result.Length; i++)
-                            {
-                                driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Backspace);
-                                System.Threading.Thread.Sleep(50);
-
-                            }
-
-                            driver.SwitchTo().ActiveElement().SendKeys(s);
-                            System.Threading.Thread.Sleep(300);
-                            driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Enter);
-                            System.Threading.Thread.Sleep(300);
-                            this.Activate();
                         }
 
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Đã có lỗi xảy ra :" + ex);
-                            this.Activate();
-                        }
-                        finally
-                        {
-                            driver?.Quit();
-                            driver?.Dispose();
-                            service?.Dispose();
-                        }
+                        driver.SwitchTo().ActiveElement().SendKeys(s);
+                        System.Threading.Thread.Sleep(300);
+                        driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Enter);
+                        System.Threading.Thread.Sleep(300);
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        this.Activate();
-                        MessageBox.Show("Không tìm  thấy cửa sổ ");
-
+                        MessageBox.Show("Đã có lỗi xảy ra :" + ex);
                     }
+
+                    // da xu ly xong tab Supro -> thoat vong lap, khong dung driver nua
+                    break;
+                }
+
+                if (!found_tab)
+                {
+                    MessageBox.Show("Không tìm thấy cửa sổ Supro Standby");
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Đã có lỗi xảy ra khi chay web auto :" + ex);
+            }
+            finally
+            {
+                // dong driver 1 lan duy nhat, sau khi da duyet xong cac tab
+                driver?.Quit();
+                driver?.Dispose();
+                service?.Dispose();
                 this.Activate();
             }
         }
 
         private void event_auto_web_click_button()
         {
+            bool found_tab = false;
+            EdgeDriverService service = null;
+            Selenium.IWebDriver driver = null;
+
             try
             {
                 string appFolder = AppDomain.CurrentDomain.BaseDirectory;
                 //MessageBox.Show("App folder: " + appFolder);
                 // 2. Ép Selenium sử dụng file msedgedriver.exe nằm ngay trong thư mục này
-                EdgeDriverService service = EdgeDriverService.CreateDefaultService(appFolder);
+                service = EdgeDriverService.CreateDefaultService(appFolder);
                 service.HideCommandPromptWindow = true;
 
-                EdgeOptions options = new EdgeOptions();//cau hinh edg 
+                EdgeOptions options = new EdgeOptions();//cau hinh edg
                 options.DebuggerAddress = "127.0.0.1:9222";
-                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg 
-                Selenium.IWebDriver driver = new EdgeDriver(service, options);//cau hinh cho driver edg 
+                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg
+                driver = new EdgeDriver(service, options);//cau hinh cho driver edg
 
-                //lay cac cua so 
+                //lay cac cua so
                 var windowHandles = driver.WindowHandles;
                 foreach (var handle in windowHandles)
                 {
                     driver.SwitchTo().Window(handle);//chuyen sang tab
                     //kiem tra title cua tab
-                    if (driver.Title.Contains("Supro Standby"))
-                    {
-                        WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
-                        try
-                        {
-                            Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("btnPOFinish")));//tim ô này
-                            clickVer.Click();
-                            this.Activate();
-                        }
-
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Đã có lỗi xảy ra :" + ex);
-                            this.Activate();
-                        }
-                    }
-                    else
-                    {
+                    if (!driver.Title.Contains("Supro Standby"))
                         continue;
+
+                    found_tab = true;
+                    WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
+                    try
+                    {
+                        Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("btnPOFinish")));//tim ô này
+                        clickVer.Click();
                     }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Đã có lỗi xảy ra :" + ex);
+                    }
+
+                    // da xu ly xong tab Supro -> thoat vong lap
+                    break;
+                }
+
+                if (!found_tab)
+                {
+                    MessageBox.Show("Không tìm thấy cửa sổ Supro Standby");
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Đã có lỗi xảy ra :" + ex);
+            }
+            finally
+            {
+                // dong driver de khong con msedgedriver.exe chay ngam
+                driver?.Quit();
+                driver?.Dispose();
+                service?.Dispose();
                 this.Activate();
             }
         }
 
         private void btn_done_Click(object sender, RoutedEventArgs e)
         {
-            event_auto_web_click_button();
+            //event_auto_web_click_button();
         }
     }
 }
