@@ -47,13 +47,5 @@
 
         public const ushort SoftwareNegativeLimitHigh = 0x6008;
         public const ushort SoftwareNegativeLimitLow = 0x6009;
-
-
-
-
-
-
-
-
     }
 }

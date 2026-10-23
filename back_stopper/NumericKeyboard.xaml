@@ -8,7 +8,8 @@
         ResizeMode="NoResize"
         Topmost="True"
         ShowInTaskbar="False"
-        WindowStartupLocation="Manual">
+        WindowStartupLocation="Manual"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <!-- Nút số thường -->
@@ -33,6 +34,20 @@
             <Style.Triggers>
                 <Trigger Property="IsPressed" Value="True">
                     <Setter Property="Background" Value="#D1D5DB"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Nút di chuyển con trỏ / xóa hết -->
+        <Style x:Key="NumKeyFunc" TargetType="Button" BasedOn="{StaticResource NumKey}">
+            <Setter Property="Foreground" Value="#4338CA"/>
+            <Setter Property="Background" Value="#E0E7FF"/>
+            <Style.Triggers>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#C7D2FE"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -130,19 +145,26 @@
             <Border CornerRadius="8" Background="#F9FAFB"
                     BorderBrush="#E5E7EB" BorderThickness="1"
                     Margin="0,0,0,12" Padding="12,8">
-                <TextBlock x:Name="txt_display"
-                           FontSize="22" FontWeight="SemiBold"
-                           Foreground="#111827"
-                           HorizontalAlignment="Right"
-                           Text=""/>
+                <Grid>
+                    <TextBlock x:Name="txt_hint"
+                               FontSize="13" Foreground="#9CA3AF"
+                               HorizontalAlignment="Left" VerticalAlignment="Center"
+                               Text=""/>
+                    <TextBlock x:Name="txt_display"
+                               FontSize="26" FontWeight="SemiBold"
+                               Foreground="#111827" MinHeight="34"
+                               HorizontalAlignment="Right"
+                               Text=""/>
+                </Grid>
             </Border>
 
             <!-- Buttons Grid -->
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="130"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="100"/>
@@ -155,21 +177,24 @@
                 <Button Content="7" Grid.Row="0" Grid.Column="0" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
                 <Button Content="8" Grid.Row="0" Grid.Column="1" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
                 <Button Content="9" Grid.Row="0" Grid.Column="2" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
+                <Button Content="⌫" Grid.Row="0" Grid.Column="3" Style="{StaticResource NumKeyDelete}" Click="Delete_Click"/>
 
                 <!-- Row 2 -->
                 <Button Content="4" Grid.Row="1" Grid.Column="0" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
                 <Button Content="5" Grid.Row="1" Grid.Column="1" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
                 <Button Content="6" Grid.Row="1" Grid.Column="2" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
+                <Button Content="C" Grid.Row="1" Grid.Column="3" Style="{StaticResource NumKeyFunc}" Click="Clear_Click"/>
 
                 <!-- Row 3 -->
                 <Button Content="1" Grid.Row="2" Grid.Column="0" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
                 <Button Content="2" Grid.Row="2" Grid.Column="1" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
                 <Button Content="3" Grid.Row="2" Grid.Column="2" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
+                <Button Content="◀" Grid.Row="2" Grid.Column="3" Style="{StaticResource NumKeyFunc}" Click="Left_Click"/>
 
                 <!-- Row 4 -->
-                <Button Content="." Grid.Row="3" Grid.Column="0" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
-                <Button Content="0" Grid.Row="3" Grid.Column="1" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
-                <Button Content="⌫" Grid.Row="3" Grid.Column="2" Style="{StaticResource NumKeyDelete}" Click="Delete_Click"/>
+                <Button Content="." Grid.Row="3" Grid.Column="0" Style="{StaticResource NumKey}" FontSize="30" Click="NumKey_Click"/>
+                <Button Content="0" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource NumKey}" Click="NumKey_Click"/>
+                <Button Content="▶" Grid.Row="3" Grid.Column="3" Style="{StaticResource NumKeyFunc}" Click="Right_Click"/>
 
             </Grid>
 

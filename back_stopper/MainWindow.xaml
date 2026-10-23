@@ -18,6 +18,8 @@
     Icon="Assets/img/ic_app.ico"
     Loaded="MetroWindow_Loaded"
     Closed="MetroWindow_Closed"
+    PreviewTextInput="MetroWindow_PreviewTextInput"
+    PreviewKeyDown="MetroWindow_PreviewKeyDown"
     WindowState="Maximized">
 
     <Window.Resources>
@@ -94,6 +96,7 @@
                                  Background="Transparent" Padding="15,0"
                                  VerticalContentAlignment="Center" Foreground="#333"
                                  KeyDown="txt_id_employee_KeyDown"
+                                 PreviewMouseLeftButtonDown="txt_id_employee_PreviewMouseLeftButtonDown"
                                  controls:TextBoxHelper.Watermark="Nhập mã số NV tại đây" GotFocus="txt_id_employee_GotFocus" LostFocus="txt_id_employee_LostFocus"/>
                     </Border>
 
@@ -615,7 +618,8 @@
                                         FontSize="30" FontWeight="SemiBold" Foreground="#4F46E5"
                                         Height="70" BorderThickness="1.5" Margin="0,0,0,16"
                                         controls:TextBoxHelper.Watermark="Step"
-                                        ValueChanged="num_step_ValueChanged"/>
+                                        ValueChanged="num_step_ValueChanged"
+                                        PreviewMouseLeftButtonDown="num_step_PreviewMouseLeftButtonDown"/>
 
                                     <Border Height="1" Background="#F0F0F0" Margin="0,0,0,14"/>
 

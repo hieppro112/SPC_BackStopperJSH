@@ -36,6 +36,36 @@ namespace back_stopper
             }
         }
 
+        // Cham vao o mat khau -> mo ban phim so, bam OK = Xac nhan
+        private bool _isKeyboardOpen = false;
+        private void txt_password_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            txt_password.Focus();
+            if (_isKeyboardOpen) return;
+            _isKeyboardOpen = true;
+
+            Dispatcher.BeginInvoke(new System.Action(() =>
+            {
+                string value;
+                try
+                {
+                    value = NumericKeyboard.Show(this, border_input, "", isPassword: true);
+                }
+                finally
+                {
+                    _isKeyboardOpen = false;
+                }
+
+                if (value == null) return;
+
+                txt_error.Visibility = Visibility.Collapsed;
+                border_input.BorderBrush = new SolidColorBrush(Colors.Transparent);
+                txt_password.Password = value;
+                Verify();
+            }), System.Windows.Threading.DispatcherPriority.Input);
+        }
+
         private void btn_confirm_Click(object sender, RoutedEventArgs e)
         {
             Verify();
