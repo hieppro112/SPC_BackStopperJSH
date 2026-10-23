@@ -1,118 +1,220 @@
-﻿using MahApps.Metro.Controls;
-using System;
+﻿using System;
 using System.Windows;
-using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace back_stopper
 {
     public partial class NumericKeyboard : Window
     {
-        private TextBox _targetTextBox;
-        private NumericUpDown _targetNumeric;
-        private string _originalText;
+        private readonly FrameworkElement _target;
+        private readonly int _maxLength;
+        private readonly bool _isPassword;
 
-        // Constructor cho TextBox
-        public NumericKeyboard(TextBox target)
+        private string _buffer;
+        // vi tri con tro trong _buffer (0 = dau chuoi)
+        private int _caret;
+        // giong SelectAll: so dau tien bam se thay the noi dung cu
+        private bool _replaceOnFirstKey = true;
+
+        private static readonly Brush CaretBrush =
+            new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2563EB"));
+
+        private NumericKeyboard(FrameworkElement target, string initialText,
+            int maxLength, bool isPassword)
         {
             InitializeComponent();
-            _targetTextBox = target;
-            _originalText = target.Text;
-            txt_display.Text = target.Text;
-            PositionNearTarget(target);
+            _target = target;
+            _maxLength = maxLength;
+            _isPassword = isPassword;
+            _buffer = initialText ?? "";
+            _caret = _buffer.Length;
+
+            Loaded += (s, e) => PositionNearTarget();
+            UpdateDisplay();
         }
 
-        // Constructor cho NumericUpDown
-        public NumericKeyboard(NumericUpDown target)
+        // Mo ban phim so, tra ve chuoi da nhap (null neu bam Huy)
+        public static string Show(Window owner, FrameworkElement target, string initialText,
+            int maxLength = 0, bool isPassword = false)
         {
-            InitializeComponent();
-            _targetNumeric = target;
-            _originalText = target.Value?.ToString() ?? "";
-            txt_display.Text = _originalText;
-            PositionNearTarget(target);
+            var keyboard = new NumericKeyboard(target, initialText, maxLength, isPassword);
+            keyboard.Owner = owner;
+            return keyboard.ShowDialog() == true ? keyboard._buffer : null;
         }
 
-        private void PositionNearTarget(FrameworkElement target)
+        // Dat ban phim ngay duoi o nhap, khong cho tran ra ngoai man hinh
+        private void PositionNearTarget()
         {
-            var pos = target.PointToScreen(new Point(0, target.ActualHeight + 4));
-            Left = pos.X;
-            Top = pos.Y;
-
-            var screen = SystemParameters.WorkArea;
-            if (Left + 240 > screen.Right)
-                Left = screen.Right - 240;
-            if (Top + 400 > screen.Bottom)
-                Top = pos.Y - 400 - target.ActualHeight;
-        }
-
-        // Lấy text hiện tại từ control đang active
-        private string GetCurrentText()
-        {
-            if (_targetTextBox != null) return _targetTextBox.Text;
-            if (_targetNumeric != null) return _targetNumeric.Value?.ToString() ?? "";
-            return "";
-        }
-
-        // Set text vào control đang active
-        private void SetCurrentText(string val)
-        {
-            if (_targetTextBox != null)
+            PresentationSource source = _target != null ? PresentationSource.FromVisual(_target) : null;
+            if (source == null || source.CompositionTarget == null)
             {
-                _targetTextBox.Text = val;
+                Rect center = SystemParameters.WorkArea;
+                Left = center.Left + (center.Width - ActualWidth) / 2;
+                Top = center.Top + (center.Height - ActualHeight) / 2;
+                return;
             }
-            else if (_targetNumeric != null)
+
+            // PointToScreen tra ve pixel thiet bi -> doi sang DIP cho dung khi man hinh scale 125%/150%
+            Matrix fromDevice = source.CompositionTarget.TransformFromDevice;
+            Point targetTop = fromDevice.Transform(_target.PointToScreen(new Point(0, 0)));
+            Point targetBottom = fromDevice.Transform(_target.PointToScreen(new Point(0, _target.ActualHeight)));
+
+            Rect area = SystemParameters.WorkArea;
+
+            double left = Math.Min(targetTop.X, area.Right - ActualWidth);
+            double top = targetBottom.Y + 4;
+
+            // khong du cho phia duoi -> hien phia tren o nhap
+            if (top + ActualHeight > area.Bottom)
+                top = targetTop.Y - ActualHeight - 4;
+
+            Left = Math.Max(left, area.Left);
+            Top = Math.Max(top, area.Top);
+        }
+
+        // Hien chuoi kem con tro "|" tai vi tri dang sua
+        private void UpdateDisplay()
+        {
+            string shown = _isPassword ? new string('●', _buffer.Length) : _buffer;
+
+            txt_display.Inlines.Clear();
+            txt_display.Inlines.Add(new Run(shown.Substring(0, _caret)));
+            txt_display.Inlines.Add(new Run("|") { Foreground = CaretBrush, FontWeight = FontWeights.Normal });
+            txt_display.Inlines.Add(new Run(shown.Substring(_caret)));
+
+            txt_hint.Text = _maxLength > 0 ? $"{_buffer.Length}/{_maxLength} số" : "";
+        }
+
+        // Chen ky tu tai vi tri con tro
+        private void InsertKey(string key)
+        {
+            if (_replaceOnFirstKey)
             {
-                if (double.TryParse(val, out double result))
-                    _targetNumeric.Value = result;
+                _buffer = "";
+                _caret = 0;
+                _replaceOnFirstKey = false;
             }
-            txt_display.Text = val;
+
+            if (key == ".")
+            {
+                if (_buffer.Contains(".")) return;
+                // ".5" -> "0.5"
+                if (_caret == 0) key = "0.";
+            }
+
+            if (_maxLength > 0 && _buffer.Length + key.Length > _maxLength) return;
+
+            _buffer = _buffer.Insert(_caret, key);
+            _caret += key.Length;
+            UpdateDisplay();
+        }
+
+        // Xoa ky tu ben trai con tro
+        private void Backspace()
+        {
+            _replaceOnFirstKey = false;
+            if (_caret > 0)
+            {
+                _buffer = _buffer.Remove(_caret - 1, 1);
+                _caret--;
+            }
+            UpdateDisplay();
+        }
+
+        private void ClearAll()
+        {
+            _replaceOnFirstKey = false;
+            _buffer = "";
+            _caret = 0;
+            UpdateDisplay();
+        }
+
+        private void MoveCaret(int newCaret)
+        {
+            // da di chuyen con tro = muon sua tiep, khong thay the noi dung cu nua
+            _replaceOnFirstKey = false;
+            _caret = Math.Max(0, Math.Min(_buffer.Length, newCaret));
+            UpdateDisplay();
         }
 
         private void NumKey_Click(object sender, RoutedEventArgs e)
         {
-            var btn = sender as Button;
-            string val = btn.Content.ToString();
-
-            string current = GetCurrentText();
-
-            // Chỉ cho 1 dấu chấm
-            if (val == "." && current.Contains(".")) return;
-
-            SetCurrentText(current + val);
+            InsertKey(((System.Windows.Controls.Button)sender).Content.ToString());
         }
 
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
-            string current = GetCurrentText();
-            if (current.Length > 0)
-                SetCurrentText(current.Substring(0, current.Length - 1));
+            Backspace();
+        }
+
+        private void Clear_Click(object sender, RoutedEventArgs e)
+        {
+            ClearAll();
+        }
+
+        private void Left_Click(object sender, RoutedEventArgs e)
+        {
+            MoveCaret(_caret - 1);
+        }
+
+        private void Right_Click(object sender, RoutedEventArgs e)
+        {
+            MoveCaret(_caret + 1);
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e)
         {
-            _targetTextBox?.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-            _targetNumeric?.GetBindingExpression(NumericUpDown.ValueProperty)?.UpdateSource();
-            Close();
+            DialogResult = true;
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            // Khôi phục giá trị gốc
-            if (_targetTextBox != null)
-                _targetTextBox.Text = _originalText;
-
-            if (_targetNumeric != null)
-            {
-                if (double.TryParse(_originalText, out double original))
-                    _targetNumeric.Value = original;
-            }
-
-            txt_display.Text = _originalText;
-            Close();
+            DialogResult = false;
         }
 
-        private void Border_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        // Van nhan ban phim cung / may quet ma vach khi ban phim so dang mo
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+            if (e.Key >= Key.D0 && e.Key <= Key.D9)
+                InsertKey(((int)(e.Key - Key.D0)).ToString());
+            else if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9)
+                InsertKey(((int)(e.Key - Key.NumPad0)).ToString());
+            else if (e.Key == Key.OemPeriod || e.Key == Key.Decimal)
+                InsertKey(".");
+            else if (e.Key == Key.Back)
+                Backspace();
+            else if (e.Key == Key.Delete)
+            {
+                if (_caret < _buffer.Length)
+                {
+                    _replaceOnFirstKey = false;
+                    _buffer = _buffer.Remove(_caret, 1);
+                    UpdateDisplay();
+                }
+            }
+            else if (e.Key == Key.Left)
+                MoveCaret(_caret - 1);
+            else if (e.Key == Key.Right)
+                MoveCaret(_caret + 1);
+            else if (e.Key == Key.Home)
+                MoveCaret(0);
+            else if (e.Key == Key.End)
+                MoveCaret(_buffer.Length);
+            else if (e.Key == Key.Enter)
+                DialogResult = true;
+            else if (e.Key == Key.Escape)
+                DialogResult = false;
+            else
+                return;
+
+            e.Handled = true;
+        }
+
+        private void Border_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Left)
                 DragMove();
         }
     }

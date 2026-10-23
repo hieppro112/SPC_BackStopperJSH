@@ -9,6 +9,7 @@ using OpenQA.Selenium.Edge;
 using Servoleadshine.Client;
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -19,9 +20,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using EdgeDriver = OpenQA.Selenium.Edge.EdgeDriver;
 using EdgeOptions = OpenQA.Selenium.Edge.EdgeOptions;
 using Selenium = OpenQA.Selenium;
@@ -129,7 +132,7 @@ namespace back_stopper
         //info config 
         private string nameContect = "";
         private int times_restart = 0;
-        private void MetroWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MetroWindow_Loaded(object sender, RoutedEventArgs e)
         {
             int.TryParse(num_step.Value.ToString(), out int n);
             Post_Master = n;
@@ -152,6 +155,16 @@ namespace back_stopper
             
             //myModBus.limit();
             Console.WriteLine("offset: " + ofset_number);
+
+            //nap du lieu bieu do sau khi mo app, mat mang thi bieu do de trong
+            try
+            {
+                await _binding.LoadChartAsync();
+            }
+            catch (Exception ex)
+            {
+                Log("Lỗi tải biểu đồ: " + ex.Message, LogType.Warning);
+            }
         }
 
 
@@ -495,6 +508,9 @@ namespace back_stopper
 
         private async void StartReadInput()
         {
+            // dang nhap lai (quet the NV khac) khong tao them vong quet thu 2
+            if (ioTask != null && !ioTask.IsCompleted) return;
+
             cts = new CancellationTokenSource();
             //quet lien tuc 
             ioTask = readinputloop(cts.Token);
@@ -1190,7 +1206,20 @@ namespace back_stopper
                 {
                     double startPos = curren_postion;
                     string po = txt_po.Text.Trim();
-                    productData product = Sql.GetProductInfo(po);
+                    productData product;
+                    try
+                    {
+                        product = await Sql.GetProductInfo(po);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("Lỗi lấy data PO: " + ex.Message, LogType.Error);
+                        _ = new ToastNotification("Không lấy được data PO (lỗi kết nối hoặc data sai): " + po, LogType.Error)
+                                .ShowAndAutoClose();
+                        txt_po.SelectAll();
+                        txt_po.Focus();
+                        return;
+                    }
 
                     if (product != null)
                     {
@@ -1199,6 +1228,8 @@ namespace back_stopper
                         value_stopper = n_stopper;
                         border_txt_po.Background = new SolidColorBrush(
                             (Color)ColorConverter.ConvertFromString("#FFE4E4E4"));
+
+
 
                         if (ah_num != 0)
                         {
@@ -1210,8 +1241,26 @@ namespace back_stopper
                             //Console.WriteLine($"AH low: {product.airhole_to_low} - AH up: {product.airhole_to_up}");
 
                             double airhole = product.airhole ?? 0;
-                            int n = Convert.ToInt32((n_stopper * 5000) + (ah_num * 5000) + (ofset_number*5000));
-                            bool checkData = airHole == product.airhole && L == product.C_L;
+
+
+                            //bu tru theo size D
+                            int alpha = 0;
+                            if(product.C_D<=20 && product.C_D >=19)
+                            {
+                                //double.TryParse(product.C_D.ToString(), out double dValue);
+                                //int.TryParse((dValue / 5).ToString(),out alpha);
+                                //alpha *= 100;
+                                alpha = 500;
+                            }
+                            else if (product.C_D>20)
+                            {
+                                //double.TryParse(product.C_D.ToString(), out double dValue);
+                                //int.TryParse((dValue / 5).ToString(), out alpha);
+                                //alpha *= 200;
+                                alpha = 800;
+                            }
+                            int n = Convert.ToInt32((n_stopper * 5000) + (ah_num * 5000) + (ofset_number*5000) + alpha);
+                            bool checkData = airHole == product.airhole && L == product.C_L && product.C_D == D;
 
                             if (!checkData)
                             {
@@ -1295,7 +1344,6 @@ namespace back_stopper
                                     _runningDialog = null;
 
 
-
                                     //tự động nhập PO
                                     var dialogConfirm = new ConfirmDialog(
                                           message: "Bắt đầu thực hiện AUTO PO?",
@@ -1315,7 +1363,7 @@ namespace back_stopper
                                     }
 
                                     //đưa dữ liệu hiện tại vào dtb
-                                    Sql.InsertDataHistory(txt_po.Text, product.airhole ?? 0.0, Set_origin_number ?? 0, int.Parse(curren_postion.ToString()), DateTime.Now, idEmployee);
+                                    await Sql.InsertDataHistory(txt_po.Text, product.airhole ?? 0.0, Set_origin_number ?? 0, int.Parse(curren_postion.ToString()), DateTime.Now, idEmployee);
 
                                 }));
 
@@ -1370,18 +1418,50 @@ namespace back_stopper
             }
         }
 
+        private bool _isAutoRunning = false;
         private async void AutoControl(string input_po)
         {
-            await event_auto_web(input_po);
-            event_auto_app(input_po);
+            // dang auto PO truoc thi bo qua, tranh 2 lan auto chong nhau
+            if (_isAutoRunning)
+            {
+                _ = new ToastNotification("Đang auto PO trước, vui lòng chờ", LogType.Warning)
+                        .ShowAndAutoClose();
+                return;
+            }
+
+            _isAutoRunning = true;
+            try
+            {
+                await event_auto_web(input_po);
+                await event_auto_app(input_po);
+            }
+            catch (Exception ex)
+            {
+                Log("Lỗi auto PO: " + ex, LogType.Error);
+                MessageBox.Show("Đã có lỗi xảy ra khi auto PO: " + ex.Message);
+            }
+            finally
+            {
+                _isAutoRunning = false;
+            }
         }
 
-        private void txt_id_employee_KeyDown(object sender, KeyEventArgs e)
+        private async void txt_id_employee_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
                 idEmployee = txt_id_employee.Text.Trim();
-                employee = Sql.GetEmployee(idEmployee);
+                try
+                {
+                    employee = await Sql.GetEmployee(idEmployee);
+                }
+                catch (Exception ex)
+                {
+                    Log("Lỗi lấy data nhân viên: " + ex.Message, LogType.Error);
+                    _ = new ToastNotification("Không kết nối được dữ liệu nhân viên, vui lòng thử lại", LogType.Error)
+                            .ShowAndAutoClose();
+                    return;
+                }
                 //event_auto_web_click_button();
                 //tự động nhập PO
 
@@ -1617,9 +1697,8 @@ namespace back_stopper
 
         private async void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
         {
-            //GetServoStatus();
-            //await event_auto_web();
-            event_auto_app("520006648961");
+            //AutoControl();
+            //AutoControl("520006648971");
             if (_isPanelOpen)
             {
                 // Ẩn panel — animate Width về 0
@@ -1666,13 +1745,166 @@ namespace back_stopper
         private void txt_po_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             TextBox txt = sender as TextBox;
+            if (txt == null) return;
 
-            if (txt != null && !txt.IsKeyboardFocusWithin)
+            if (!txt.IsKeyboardFocusWithin)
             {
                 e.Handled = true;
                 txt.Focus();
             }
+
+            // PO luon 12 so, bam OK = bam Enter
+            OpenNumericKeyboard(txt, txt.Text, value => EnterTextFromKeyboard(txt, value), maxLength: 12);
         }
+
+        private void txt_id_employee_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!txt_id_employee.IsKeyboardFocusWithin)
+            {
+                e.Handled = true;
+                txt_id_employee.Focus();//GotFocus doi ten NV -> ma NV
+            }
+
+            OpenNumericKeyboard(txt_id_employee, txt_id_employee.Text,
+                value => EnterTextFromKeyboard(txt_id_employee, value));
+        }
+
+        private void num_step_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // bam nut +/- cua NumericUpDown thi giu hanh vi cu
+            if (IsInsideButton(e.OriginalSource as DependencyObject, num_step)) return;
+
+            e.Handled = true;
+            string current = num_step.Value?.ToString(CultureInfo.InvariantCulture) ?? "";
+
+            OpenNumericKeyboard(num_step, current, value =>
+            {
+                // dung InvariantCulture: may cai tieng Viet se hieu "0.5" thanh 5
+                if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double step))
+                {
+                    num_step.Value = step;//NumericUpDown tu gioi han trong Minimum/Maximum
+                }
+            });
+        }
+
+        #region nhan ma tu may quet
+        // may quet go moi ky tu cach nhau vai ms, nguoi go tay cham hon nhieu
+        // -> chuoi ky tu den lien tuc (cach nhau <= ScanKeyGapMs) + Enter = 1 lan quet
+        private const int ScanKeyGapMs = 80;
+        private readonly StringBuilder _scanBuffer = new StringBuilder();
+        private int _lastScanKeyTime;
+        private TextBox _scanFocusedBox;
+        private string _scanFocusedBoxText;
+
+        private void MetroWindow_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            if (_scanBuffer.Length == 0 || e.Timestamp - _lastScanKeyTime > ScanKeyGapMs)
+            {
+                // bat dau chuoi moi: nho o dang focus de tra lai noi dung neu ma quet thuoc o khac
+                _scanBuffer.Clear();
+                _scanFocusedBox = Keyboard.FocusedElement as TextBox;
+                _scanFocusedBoxText = _scanFocusedBox?.Text;
+            }
+
+            _scanBuffer.Append(e.Text);
+            _lastScanKeyTime = e.Timestamp;
+        }
+
+        private void MetroWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter) return;
+
+            bool isScan = _scanBuffer.Length >= 5 && e.Timestamp - _lastScanKeyTime <= ScanKeyGapMs;
+            string code = _scanBuffer.ToString().Trim();
+            _scanBuffer.Clear();
+            if (!isScan) return;
+
+            // 12 ky tu = PO, 5 so = ma nhan vien
+            TextBox target;
+            if (code.Length == 12)
+                target = txt_po;
+            else if (code.Length == 5 && code.All(char.IsDigit))
+                target = txt_id_employee;
+            else
+                return;//ma khac -> de o dang focus xu ly nhu cu
+
+            e.Handled = true;
+
+            // ky tu quet da lo go vao o khac -> tra lai noi dung cu cho o do
+            if (_scanFocusedBox != null && _scanFocusedBox != target)
+            {
+                _scanFocusedBox.Text = _scanFocusedBoxText;
+            }
+
+            if (!target.IsEnabled)
+            {
+                _ = new ToastNotification("Chưa thể nhập PO lúc này (chưa đăng nhập hoặc đang chạm MIN/MAX)", LogType.Warning)
+                        .ShowAndAutoClose();
+                return;
+            }
+
+            if (target == txt_po)
+            {
+                txt_po.Focus();
+            }
+            EnterTextFromKeyboard(target, code);
+        }
+        #endregion
+
+        #region ban phim so tren man hinh
+        private bool _isKeyboardOpen = false;
+
+        private void OpenNumericKeyboard(FrameworkElement target, string initialText, Action<string> onOk,
+            int maxLength = 0)
+        {
+            if (_isKeyboardOpen) return;
+            _isKeyboardOpen = true;
+
+            // doi su kien cham xu ly xong roi moi mo ban phim
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                string value;
+                try
+                {
+                    value = NumericKeyboard.Show(this, target, initialText, maxLength);
+                }
+                finally
+                {
+                    _isKeyboardOpen = false;
+                }
+
+                if (value != null)
+                {
+                    onOk(value);
+                }
+            }), DispatcherPriority.Input);
+        }
+
+        //gan gia tri vao o nhap roi gia lap phim Enter de chay dung logic cu
+        private void EnterTextFromKeyboard(TextBox target, string value)
+        {
+            target.Text = value;
+            target.CaretIndex = value.Length;
+
+            PresentationSource source = PresentationSource.FromVisual(target);
+            if (source == null) return;
+
+            target.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, Key.Enter)
+            {
+                RoutedEvent = Keyboard.KeyDownEvent
+            });
+        }
+
+        private static bool IsInsideButton(DependencyObject source, DependencyObject container)
+        {
+            for (DependencyObject d = source; d != null && d != container;
+                 d = d is Visual ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            {
+                if (d is ButtonBase) return true;
+            }
+            return false;
+        }
+        #endregion
 
         private void Event_relay(bool b = true)
         {
@@ -1849,13 +2081,13 @@ namespace back_stopper
 
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
-        private void event_auto_app(string numPO)
+        private async Task event_auto_app(string numPO)
         {
             ////////////////////
-            //tiep tuc qua app 2 
+            //tiep tuc qua app 2
             ///////////////////
             Process notepadProcess = null;
-            Process[] processes = Process.GetProcessesByName("WorkSupportSystem");//kiem tra xem co đang được mở sẵn không 
+            Process[] processes = Process.GetProcessesByName("WorkSupportSystem");//kiem tra xem co đang được mở sẵn không
 
             if (processes.Length > 0)
             {
@@ -1865,14 +2097,16 @@ namespace back_stopper
             {
                 //khởi động notepad
                 notepadProcess = Process.Start("WorkSupportSystem.exe");
-                notepadProcess.WaitForInputIdle(2000);
+                //cho app khoi dong o luong rieng, khong lam dung UI
+                await Task.Run(() => notepadProcess.WaitForInputIdle(2000));
             }
 
             if (notepadProcess != null)
             {
                 //để cửa sổ lên đầu
                 SetForegroundWindow(notepadProcess.MainWindowHandle);
-                System.Threading.Thread.Sleep(300);
+                //dung await Task.Delay thay Thread.Sleep: UI + vong doc cam bien van chay trong luc cho
+                await Task.Delay(300);
 
                 ////dán nội dung vào nontepad
                 //System.Windows.Clipboard.SetText(idEmployee);
@@ -1882,19 +2116,38 @@ namespace back_stopper
                 //System.Threading.Thread.Sleep(300);
 
                 System.Windows.Forms.SendKeys.SendWait("^a");      // Ctrl + A
-                Thread.Sleep(300);
+                await Task.Delay(300);
 
                 System.Windows.Forms.SendKeys.SendWait("{DEL}");   // Xóa
-                Thread.Sleep(300);
+                await Task.Delay(300);
                 System.Windows.Forms.SendKeys.SendWait(numPO);
                 System.Windows.Forms.SendKeys.SendWait("{ENTER}");
-                System.Threading.Thread.Sleep(300);
+                await Task.Delay(300);
 
             }
         }
 
         private async Task event_auto_web(string s)
         {
+            // Selenium chay o luong rieng: Edge loi/cham thi UI va vong doc cam bien (E-stop) van chay
+            string error = await Task.Run(() => RunAutoWeb(s));
+
+            this.Activate();
+            if (error != null)
+            {
+                MessageBox.Show(error);
+            }
+        }
+
+        // Chay o luong nen, KHONG dung control UI o day. Tra ve null neu OK, nguoc lai la noi dung loi
+        private static string RunAutoWeb(string s)
+        {
+            // Edge chua mo cong debug -> bao loi ngay, khong phai doi driver timeout ~60s
+            if (!IsPortOpen("127.0.0.1", 9222, 1000))
+            {
+                return "Không kết nối được Edge (port 9222).\nHãy mở Edge bằng shortcut có --remote-debugging-port=9222 rồi thử lại.";
+            }
+
             bool found_tab = false;
             EdgeDriverService service = null;
             Selenium.IWebDriver driver = null;
@@ -1902,14 +2155,12 @@ namespace back_stopper
             try
             {
                 string appFolder = AppDomain.CurrentDomain.BaseDirectory;
-                //MessageBox.Show("App folder: " + appFolder);
                 // 2. Ép Selenium sử dụng file msedgedriver.exe nằm ngay trong thư mục này
                 service = EdgeDriverService.CreateDefaultService(appFolder);
                 service.HideCommandPromptWindow = true;
 
                 EdgeOptions options = new EdgeOptions();//cau hinh edg
                 options.DebuggerAddress = "127.0.0.1:9222";
-                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg
                 driver = new EdgeDriver(service, options);//cau hinh cho driver edg
 
                 //lay cac cua so
@@ -1935,18 +2186,18 @@ namespace back_stopper
                         for (int i = 0; i < s_result.Length; i++)
                         {
                             driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Backspace);
-                            System.Threading.Thread.Sleep(50);
-
+                            Thread.Sleep(50);//luong nen nen Sleep khong lam dung UI
                         }
 
                         driver.SwitchTo().ActiveElement().SendKeys(s);
-                        System.Threading.Thread.Sleep(300);
+                        Thread.Sleep(300);
                         driver.SwitchTo().ActiveElement().SendKeys(Selenium.Keys.Enter);
-                        System.Threading.Thread.Sleep(300);
+                        Thread.Sleep(300);
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("Đã có lỗi xảy ra :" + ex);
+                        Console.WriteLine("Loi web auto: " + ex);
+                        return "Đã có lỗi xảy ra khi nhập PO trên web: " + ex.Message;
                     }
 
                     // da xu ly xong tab Supro -> thoat vong lap, khong dung driver nua
@@ -1955,83 +2206,43 @@ namespace back_stopper
 
                 if (!found_tab)
                 {
-                    MessageBox.Show("Không tìm thấy cửa sổ Supro Standby");
+                    return "Không tìm thấy cửa sổ Supro Standby";
                 }
+                return null;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Đã có lỗi xảy ra khi chay web auto :" + ex);
+                Console.WriteLine("Loi web auto: " + ex);
+                return "Đã có lỗi xảy ra khi chạy web auto: " + ex.Message;
             }
             finally
             {
                 // dong driver 1 lan duy nhat, sau khi da duyet xong cac tab
-                driver?.Quit();
-                driver?.Dispose();
-                service?.Dispose();
-                this.Activate();
+                try
+                {
+                    driver?.Quit();
+                    driver?.Dispose();
+                    service?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Loi dong driver: " + ex.Message);
+                }
             }
         }
 
-        private void event_auto_web_click_button()
+        private static bool IsPortOpen(string host, int port, int timeoutMs)
         {
-            bool found_tab = false;
-            EdgeDriverService service = null;
-            Selenium.IWebDriver driver = null;
-
-            try
+            using (var client = new System.Net.Sockets.TcpClient())
             {
-                string appFolder = AppDomain.CurrentDomain.BaseDirectory;
-                //MessageBox.Show("App folder: " + appFolder);
-                // 2. Ép Selenium sử dụng file msedgedriver.exe nằm ngay trong thư mục này
-                service = EdgeDriverService.CreateDefaultService(appFolder);
-                service.HideCommandPromptWindow = true;
-
-                EdgeOptions options = new EdgeOptions();//cau hinh edg
-                options.DebuggerAddress = "127.0.0.1:9222";
-                //Selenium.IWebDriver driver = new EdgeDriver(options);//cau hinh cho driver edg
-                driver = new EdgeDriver(service, options);//cau hinh cho driver edg
-
-                //lay cac cua so
-                var windowHandles = driver.WindowHandles;
-                foreach (var handle in windowHandles)
+                try
                 {
-                    driver.SwitchTo().Window(handle);//chuyen sang tab
-                    //kiem tra title cua tab
-                    if (!driver.Title.Contains("Supro Standby"))
-                        continue;
-
-                    found_tab = true;
-                    WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));//doi web load khoang 5s
-                    try
-                    {
-                        Selenium.IWebElement clickVer = wait.Until(d => d.FindElement(Selenium.By.Id("btnPOFinish")));//tim ô này
-                        clickVer.Click();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Đã có lỗi xảy ra :" + ex);
-                    }
-
-                    // da xu ly xong tab Supro -> thoat vong lap
-                    break;
+                    return client.ConnectAsync(host, port).Wait(timeoutMs) && client.Connected;
                 }
-
-                if (!found_tab)
+                catch
                 {
-                    MessageBox.Show("Không tìm thấy cửa sổ Supro Standby");
+                    return false;
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Đã có lỗi xảy ra :" + ex);
-            }
-            finally
-            {
-                // dong driver de khong con msedgedriver.exe chay ngam
-                driver?.Quit();
-                driver?.Dispose();
-                service?.Dispose();
-                this.Activate();
             }
         }
 

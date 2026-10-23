@@ -18,23 +18,23 @@ namespace back_stopper.Database
         private static string query_id_get_name { get; } = "select [Name] from DataSPC where [Code] = @idNV";
         private static string query_connect_data_history { get; } = "Data Source=192.168.122.2;Initial Catalog=F2Database;User ID=admin;Password=Buitanphat0201@";
 
-        public static EmployeeData GetEmployee(string id)
+        public static async Task<EmployeeData> GetEmployee(string id)
         {
             EmployeeData data = null;
 
             using (SqlConnection conn = new SqlConnection(connection_Employee))
             {
-                conn.Open();
+                await conn.OpenAsync();
 
                 using (SqlCommand cmd = new SqlCommand(query_id_get_name, conn))
                 {
                     cmd.Parameters.AddWithValue("@idNV", id);
 
-                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
                     {
                         try
                         {
-                            if (reader.Read())
+                            if (await reader.ReadAsync())
                             {
                                 data = new EmployeeData
                                 {
@@ -58,14 +58,14 @@ namespace back_stopper.Database
         //lay so luong don hang moi gio 
         private static string query_get_Count_Po { get; } = @"
               SELECT COUNT(DISTINCT AUFNR) AS SoLuongDonHang
-            FROM [F2Database].[dbo].[F2_BackStopper_history_main]
+            FROM [KVH].[dbo].[BackStopperHistoryMain]
             WHERE TIME_RUN >= DATEADD(HOUR, @Time_p, GETDATE())
               AND TIME_RUN <= DATEADD(HOUR, @Time_n, GETDATE());";
-        public static int GetCountPO(int hour)
+        public static async Task<int> GetCountPO(int hour)
         {
             using (SqlConnection conn = new SqlConnection(query_connect_data_history))
             {
-                conn.Open();
+                await conn.OpenAsync();
 
                 using (SqlCommand cmd = new SqlCommand(query_get_Count_Po, conn))
                 {
@@ -73,9 +73,9 @@ namespace back_stopper.Database
                     cmd.Parameters.AddWithValue("@Time_n", hour);
 
 
-                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    using (SqlDataReader reader =  await cmd.ExecuteReaderAsync())
                     {
-                        if (reader.Read())
+                        if (await reader.ReadAsync())
                         {
                             int.TryParse(reader["SoLuongDonHang"]?.ToString(), out int sluong_po);
                             return sluong_po;
@@ -119,21 +119,21 @@ namespace back_stopper.Database
             WHERE req.AUFNR = @po
             ";
 
-        public static productData GetProductInfo(string po)
+        public static async Task<productData> GetProductInfo(string po)
         {
             productData data = null;
 
             using (SqlConnection conn = new SqlConnection(connectionString))
             {
-                conn.Open();
+                await conn.OpenAsync();
 
                 using (SqlCommand cmd = new SqlCommand(getDataforPo, conn))
                 {
                     cmd.Parameters.AddWithValue("@po", po);
 
-                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
                     {
-                        if (reader.Read())
+                        if (await reader.ReadAsync())
                         {
                             double.TryParse(reader["AirHole"]?.ToString(), out double airhole);
                             MatchCollection matches = Regex.Matches(reader["ProductName"]?.ToString(), @"\d+");
@@ -172,14 +172,14 @@ namespace back_stopper.Database
         }
 
         //đưa dữ liệu vào history
-        public static void InsertDataHistory(string po, double ah, int origin_num, int indexNow, DateTime time, string msnv)
+        public static async Task InsertDataHistory(string po, double ah, int origin_num, int indexNow, DateTime time, string msnv)
         {
             try
             {
                 using (SqlConnection conn = new SqlConnection(query_connect_data_history))
                 {
-                    conn.Open();
-                    string query = "INSERT INTO [dbo].[F2_BackStopper_history_main]\r\n      " +
+                    await conn.OpenAsync();
+                    string query = "INSERT INTO [KVH].[dbo].[BackStopperHistoryMain]\r\n      " +
                         "([AUFNR], [AH], [ORIGIN], [INDEX_NOW], [TIME_RUN], [MSNV])\r\n" +
                         "VALUES (@po, @ah, @origin, @index, @time,@msnv)";
                     using (SqlCommand cmd = new SqlCommand(query, conn))
@@ -190,7 +190,7 @@ namespace back_stopper.Database
                         cmd.Parameters.AddWithValue("@index", indexNow);
                         cmd.Parameters.AddWithValue("@time", time);
                         cmd.Parameters.AddWithValue("@msnv", msnv);
-                        cmd.ExecuteNonQuery();
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
             }
