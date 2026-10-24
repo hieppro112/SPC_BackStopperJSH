@@ -1566,8 +1566,7 @@ namespace back_stopper
             txt_d.Text = "";
             txt_airhole.Text = "";
 
-            var reportScreen = new ErrorReportDialog();
-            reportScreen.ShowDialog();
+           
 
             //D = 0;
             //L = 0;
@@ -2246,6 +2245,8 @@ namespace back_stopper
         private void btn_done_Click(object sender, RoutedEventArgs e)
         {
             //event_auto_web_click_button();
+            var reportScreen = new ErrorReportDialog();
+            reportScreen.ShowDialog();
         }
     }
 }

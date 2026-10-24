@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using back_stopper.Helper;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace back_stopper
@@ -26,11 +27,11 @@ namespace back_stopper
         // Nút Gửi
         private void btnSubmit_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(txtErrorDetail.Text))
-            {
-                MessageBox.Show("Vui lòng nhập chi tiết lỗi!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            //if (string.IsNullOrWhiteSpace(txtErrorDetail.Text))
+            //{
+            //    MessageBox.Show("Vui lòng nhập chi tiết lỗi!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            //    return;
+            //}
 
             // Lấy dữ liệu gửi đi
             string selectedType = (cboErrorType.SelectedItem as ComboBoxItem)?.Content.ToString();
@@ -38,6 +39,7 @@ namespace back_stopper
 
             // TODO: Gửi dữ liệu về Server hoặc lưu Log ở đây
             MessageBox.Show("Đã gửi báo cáo lỗi thành công!", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+            Aleart_error.ReadJson("C:\\BackStopper_config\\alerts\\alerts.json");
 
             this.DialogResult = true;
             this.Close();
