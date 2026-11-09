@@ -1,4 +1,5 @@
 ﻿using back_stopper.Database;
+using back_stopper.Helper;
 using back_stopper.Model;
 using back_stopper.ViewModel;
 using CdioCs;
@@ -164,6 +165,12 @@ namespace back_stopper
             {
                 Log("Lỗi tải biểu đồ: " + ex.Message, LogType.Warning);
             }
+
+            //bao loi luu tam luc mat mang: gui lai khi mo app va moi 5 phut
+            _ = Aleart_error.ResendPendingAsync();
+            var resendTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+            resendTimer.Tick += (s, args) => _ = Aleart_error.ResendPendingAsync();
+            resendTimer.Start();
         }
 
 
@@ -1639,22 +1646,42 @@ namespace back_stopper
             GetValueStep();
         }
 
+        // nut chon nhanh khoang cach moi lan nhan (Tag = so mm)
+        private void StepPreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn
+                && double.TryParse(btn.Tag?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double step))
+            {
+                num_step.Value = step;
+            }
+        }
+
+        // hien/an bang dieu khien jog (de len vung thong tin san pham)
+        private void ShowJogPanel(bool show)
+        {
+            panel_jog.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (show)
+            {
+                GetValueStep();//cap nhat dong "xung - mm" duoi o khoang cach
+            }
+        }
+
         //event btn fab
         void Event_fab()
         {
-            if (popup_jog.IsOpen)
+            if (panel_jog.Visibility == Visibility.Visible)
             {
                 return;
             }
 
-            // Popup đang đóng → hỏi mật khẩu trước
+            // Bảng đang ẩn → hỏi mật khẩu trước
             var dialog = new PasswordDialog();
             dialog.Owner = this;
             dialog.ShowDialog();
 
             if (dialog.IsConfirmed)
             {
-                popup_jog.IsOpen = true;
+                ShowJogPanel(true);
             }
             else
             {
@@ -1683,7 +1710,7 @@ namespace back_stopper
             _ = new ToastNotification("Set Gốc Hoàn Tất", LogType.Success)
                              .ShowAndAutoClose();
             //}
-            popup_jog.IsOpen = false;
+            ShowJogPanel(false);
 
         }
 
@@ -1692,8 +1719,14 @@ namespace back_stopper
 
         private async void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
         {
+            //Event_fab();
             //AutoControl();
             //AutoControl("520006648971");
+            //var reportScreen = new ErrorReportDialog(idEmployee, employee?.name, txt_po.Text.Trim());
+            //reportScreen.Owner = this;
+            //reportScreen.ShowDialog();
+
+
             if (_isPanelOpen)
             {
                 // Ẩn panel — animate Width về 0
@@ -1927,7 +1960,7 @@ namespace back_stopper
 
         private void btn_cancel_control_Click(object sender, RoutedEventArgs e)
         {
-            popup_jog.IsOpen = false;
+            ShowJogPanel(false);
             txt_po.Focus();
             txt_po.SelectAll();
         }
@@ -2245,7 +2278,8 @@ namespace back_stopper
         private void btn_done_Click(object sender, RoutedEventArgs e)
         {
             //event_auto_web_click_button();
-            var reportScreen = new ErrorReportDialog();
+            var reportScreen = new ErrorReportDialog(idEmployee, employee?.name, txt_po.Text.Trim());
+            reportScreen.Owner = this;
             reportScreen.ShowDialog();
         }
     }

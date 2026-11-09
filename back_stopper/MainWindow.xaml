@@ -53,6 +53,43 @@
             <Setter Property="Foreground" Value="#888"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
+
+        <!-- Nút bảng điều khiển jog: màu theo Background, mờ đi khi bị khóa (chạm MIN/MAX) -->
+        <Style x:Key="JogBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="b" Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="b" Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Nút chọn nhanh khoảng cách mỗi lần nhấn -->
+        <Style x:Key="StepChip" TargetType="Button" BasedOn="{StaticResource JogBtn}">
+            <Setter Property="Foreground" Value="#4338CA"/>
+            <Setter Property="Background" Value="#EEF2FF"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="Height" Value="48"/>
+            <Setter Property="Margin" Value="3,0"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="20">
@@ -295,6 +332,104 @@
                                 </TextBlock>
                             </Grid>
                         </Border>
+
+                        <!-- BẢNG ĐIỀU KHIỂN JOG: hiện đè lên 4 ô thông tin sản phẩm sau khi nhập đúng mật khẩu (btn_fab) -->
+                        <Border x:Name="panel_jog"
+                                Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                Margin="6" Padding="20" CornerRadius="16"
+                                Background="White" BorderBrush="#C7D2FE" BorderThickness="2"
+                                Panel.ZIndex="10" Visibility="Collapsed">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.18"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Tiêu đề + vị trí hiện tại -->
+                                <Grid Margin="0,0,0,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="🎮  Điều khiển và lấy gốc" FontSize="24" FontWeight="SemiBold"
+                                               Foreground="#1E1B4B" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" Background="#EEF2FF" CornerRadius="10" Padding="14,6">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Vị trí: " FontSize="18" Foreground="#6B7280" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding CurrenPost}" FontSize="22" FontWeight="Bold"
+                                                       Foreground="#4338CA" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="20"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Khoảng cách mỗi lần nhấn -->
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Khoảng cách mỗi lần nhấn (mm)" FontSize="16"
+                                                   Foreground="#6B7280" Margin="0,0,0,8"/>
+                                        <controls:NumericUpDown
+                                            x:Name="num_step"
+                                            InputScope="Number"
+                                            Value="1" Minimum="0.01" Maximum="10" Interval="0.1"
+                                            FontSize="30" FontWeight="SemiBold" Foreground="#4F46E5"
+                                            Height="70" BorderThickness="1.5"
+                                            controls:TextBoxHelper.Watermark="Step"
+                                            ValueChanged="num_step_ValueChanged"
+                                            PreviewMouseLeftButtonDown="num_step_PreviewMouseLeftButtonDown"/>
+                                        <TextBlock x:Name="txt_step_display" Text="1000" FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="#4F46E5" Margin="0,8,0,14"/>
+                                        <TextBlock Text="Chọn nhanh (mm)" FontSize="14" Foreground="#9CA3AF" Margin="0,0,0,6"/>
+                                        <UniformGrid Columns="5">
+                                            <Button Content="0.1" Tag="0.1" Style="{StaticResource StepChip}" Click="StepPreset_Click"/>
+                                            <Button Content="0.5" Tag="0.5" Style="{StaticResource StepChip}" Click="StepPreset_Click"/>
+                                            <Button Content="1" Tag="1" Style="{StaticResource StepChip}" Click="StepPreset_Click"/>
+                                            <Button Content="2" Tag="2" Style="{StaticResource StepChip}" Click="StepPreset_Click"/>
+                                            <Button Content="5" Tag="5" Style="{StaticResource StepChip}" Click="StepPreset_Click"/>
+                                        </UniformGrid>
+                                    </StackPanel>
+
+                                    <!-- Nút chạy J+ / J- -->
+                                    <Grid Grid.Column="2">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="12"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        <Button x:Name="btn_start" Content="▲   J+" Click="btn_start_Click"
+                                                Style="{StaticResource JogBtn}" Background="#16A34A"
+                                                FontSize="30" MinHeight="70"/>
+                                        <Button x:Name="btn_Stop" Grid.Row="2" Content="▼   J-" Click="btn_Stop_Click"
+                                                Style="{StaticResource JogBtn}" Background="#DC2626"
+                                                FontSize="30" MinHeight="70"/>
+                                    </Grid>
+                                </Grid>
+
+                                <!-- Lấy gốc / đóng bảng -->
+                                <Grid Grid.Row="2" Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="btn_set_origin" Content="⌖   Xác định gốc" Click="btn_set_origin_Click"
+                                            Style="{StaticResource JogBtn}" Background="#0EA5E9"
+                                            Height="58" FontSize="22"/>
+                                    <Button x:Name="btn_cancel_control" Grid.Column="2" Content="✕   Đóng" Click="btn_cancel_control_Click"
+                                            Style="{StaticResource JogBtn}" Background="#6B7280"
+                                            Height="58" FontSize="22"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
                     </Grid>
                     <!-- STOP BUTTON — dưới cùng -->
                     <Button Grid.Row="3"
@@ -481,137 +616,6 @@
 
 
                     <Grid Grid.Column="2" VerticalAlignment="Center">
-                        <Popup x:Name="popup_jog"
-                               StaysOpen="True"
-                               AllowsTransparency="True">
-
-                            <Border Background="White" CornerRadius="20" Padding="24"
-                                    Width="400" Margin="0,0,0,4">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.18"/>
-                                </Border.Effect>
-                                <StackPanel>
-
-                                    <TextBlock Text="Điều khiển và lấy gốc"
-                                               FontSize="16" FontWeight="SemiBold"
-                                               Foreground="#222" Margin="0,0,0,12"/>
-
-                                    <Grid Margin="0,0,0,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="khoảng cách/lần" FontSize="13"
-                                                   Foreground="#888" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="txt_step_display" Grid.Column="1"
-                                                   Text="1000" FontSize="15" FontWeight="Bold" Foreground="#4F46E5"/>
-                                    </Grid>
-
-                                    <controls:NumericUpDown
-                                        x:Name="num_step"
-                                        InputScope="Number"
-                                        Value="1" Minimum="0.01" Maximum="10" Interval="0.1"
-                                        FontSize="30" FontWeight="SemiBold" Foreground="#4F46E5"
-                                        Height="70" BorderThickness="1.5" Margin="0,0,0,16"
-                                        controls:TextBoxHelper.Watermark="Step"
-                                        ValueChanged="num_step_ValueChanged"
-                                        PreviewMouseLeftButtonDown="num_step_PreviewMouseLeftButtonDown"/>
-
-                                    <Border Height="1" Background="#F0F0F0" Margin="0,0,0,14"/>
-
-                                    <Button x:Name="btn_start"
-                                            Content="▲   J+" Click="btn_start_Click"
-                                            Height="64" FontSize="22" FontWeight="SemiBold"
-                                            Foreground="White" Background="#16A34A"
-                                            BorderThickness="0" Cursor="Hand" Margin="0,0,0,10">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="12">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#15803D"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsPressed" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#14532D"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-
-                                    <Button x:Name="btn_Stop"
-                                            Content="▼   J-" Click="btn_Stop_Click"
-                                            Height="64" FontSize="22" FontWeight="SemiBold"
-                                            Foreground="White" Background="#DC2626"
-                                            BorderThickness="0" Cursor="Hand" Margin="0,0,0,0">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="12">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#B91C1C"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsPressed" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#991B1B"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-
-                                    <Border Height="1" Background="#F0F0F0" Margin="0,14,0,14"/>
-
-                                    <Button x:Name="btn_set_origin"
-                                            Content="⌖   Xác định gốc" Click="btn_set_origin_Click"
-                                            Height="56" FontSize="20" FontWeight="SemiBold"
-                                            Foreground="White" Background="#0EA5E9"
-                                            BorderThickness="0" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="12">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#0284C7"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsPressed" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#0369A1"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-
-                                    <Button x:Name="btn_cancel_control"
-                                            Content="Cancel" Click="btn_cancel_control_Click"
-                                            Height="64" FontSize="22" FontWeight="SemiBold"
-                                            Foreground="White" Background="#FFC5B510"
-                                            BorderThickness="0" Cursor="Hand" Margin="0,30,0,0">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="12">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#B91C1C"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsPressed" Value="True">
-                                                        <Setter TargetName="b" Property="Background" Value="#991B1B"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-
-                                </StackPanel>
-                            </Border>
-                        </Popup>
 
                         <Button x:Name="btn_fab"
                                 Click="btn_fab_Click"
