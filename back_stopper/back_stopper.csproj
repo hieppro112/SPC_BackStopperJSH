@@ -28,7 +28,7 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>36</ApplicationRevision>
+    <ApplicationRevision>38</ApplicationRevision>
     <ApplicationVersion>1.0.1.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -189,7 +189,6 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="CONTROL\Class1.cs" />
     <Compile Include="el6servolibrary\Communication\MyModbusClient.cs" />
     <Compile Include="el6servolibrary\Servo\EL6Register.cs" />
     <Compile Include="el6servolibrary\Servo\EL6Servo.cs" />
@@ -197,6 +196,7 @@
     <Compile Include="ErrorReportDialog.xaml.cs">
       <DependentUpon>ErrorReportDialog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Helper\Aleart_error.cs" />
     <Compile Include="Model\BlinkSource.cs" />
     <Compile Include="NumericKeyboard.xaml.cs">
       <DependentUpon>NumericKeyboard.xaml</DependentUpon>

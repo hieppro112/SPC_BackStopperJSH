@@ -1,4 +1,5 @@
-﻿using back_stopper.Model;
+﻿using back_stopper.Helper;
+using back_stopper.Model;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -15,14 +16,14 @@ namespace back_stopper.Database
         private static string connectionString { get; } = "Data Source=192.168.122.2;Initial Catalog=MANUFASPCPD;User ID=kuser;Password=SPC123@";
         //dl nhan vien
         private static string connection_Employee { get; } = @"Data Source=192.168.0.11;Initial Catalog=SGPrecision;User ID=hrmsadmin;Password=adminhrms;Max Pool Size=50;Application Name=Molybden_DL;";
-        private static string query_id_get_name { get; } = "select [Name] from DataSPC where [Code] = @idNV";
+        private static string query_id_get_name { get; } = "select Name from F2Database.dbo.F2_HR_Data fhd  where [Code] = @idNV";
         private static string query_connect_data_history { get; } = "Data Source=192.168.122.2;Initial Catalog=F2Database;User ID=admin;Password=Buitanphat0201@";
 
         public static async Task<EmployeeData> GetEmployee(string id)
         {
             EmployeeData data = null;
 
-            using (SqlConnection conn = new SqlConnection(connection_Employee))
+            using (SqlConnection conn = new SqlConnection(connectionString))
             {
                 await conn.OpenAsync();
 
@@ -199,6 +200,33 @@ namespace back_stopper.Database
                 Console.WriteLine("Lỗi ex: "+ex);
             }
 
+        }
+
+        //đưa báo lỗi của công nhân lên bảng, tool trên máy team sẽ đọc bảng này để gửi Teams
+        //lỗi kết nối thì ném exception để bên gọi lưu tạm và gửi lại sau
+        public static async Task InsertErrorReport(Aleart_error alert)
+        {
+            //mất mạng thì báo lỗi sau 5s thay vì chờ 15s mặc định
+            var builder = new SqlConnectionStringBuilder(query_connect_data_history) { ConnectTimeout = 5 };
+
+            using (SqlConnection conn = new SqlConnection(builder.ConnectionString))
+            {
+                await conn.OpenAsync();
+                string query = "INSERT INTO [KVH].[dbo].[BackStopperErrorReport]\r\n      " +
+                    "([NameMachine], [IdEmployee], [NameEmployee], [ErrorType], [Message], [Po], [CreatedAt])\r\n" +
+                    "VALUES (@machine, @idNV, @nameNV, @type, @message, @po, @time)";
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@machine", (object)alert.nameMachine ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@idNV", (object)alert.idEmployee ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@nameNV", (object)alert.nameEmployee ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@type", (object)alert.Title ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@message", (object)alert.Message ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@po", (object)alert.po ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@time", alert.dateAleart);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
         }
     }
 }
