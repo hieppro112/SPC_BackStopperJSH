@@ -381,6 +381,8 @@ namespace back_stopper
                 return;
 
             isMoving = true;
+            //bip canh bao trong luc servo chay (quet PO, ve Home)
+            AlarmSound.StartMoving();
 
 
             try
@@ -401,7 +403,8 @@ namespace back_stopper
             finally
             {
                 isMoving = false;
-                //kiem tra dung vi tri chay chua 
+                AlarmSound.StopMoving();
+                //kiem tra dung vi tri chay chua
                 check_pos_for_relay = (Math.Abs(pos_target - curren_postion) <= 1600) && (Math.Abs(pos_target - curren_postion) >= 0);
                 Console.WriteLine("pos: " + pos_target + "curr pos " + curren_postion + "result: " + check_pos_for_relay);
 
@@ -425,6 +428,8 @@ namespace back_stopper
                 return;
 
             isRestarting = true;
+            //ve Home gom 2 lenh chay: giu tieng bip lien tuc tu dau den cuoi
+            AlarmSound.StartMoving();
             try
             {
                 StartBlinkServoPanel(LogType.Warning);
@@ -444,6 +449,7 @@ namespace back_stopper
             finally
             {
                 isRestarting = false;
+                AlarmSound.StopMoving();
                 //StopBlinkLabel("-",txt_notify);
                 StopBlinkServoPanel();
             }
@@ -795,6 +801,7 @@ namespace back_stopper
                     //StopPort();
                     isCheckStopMin = true;
                     isCheckStopHome = false;
+                    AlarmSound.PlayLimitAlarm();
                     _ = eventCancel("Đã chạm MIN! Hành trình đã bị dừng", LogType.Error);
                 }
             }
@@ -824,6 +831,7 @@ namespace back_stopper
                 {
                     StopPort();
                     isCheckStopMax = true;
+                    AlarmSound.PlayLimitAlarm();
                     _ = eventCancel("Đã chạm MAX! Hành trình đã bị dừng", LogType.Error);
                 }
             }
@@ -1669,6 +1677,8 @@ namespace back_stopper
         //event btn fab
         void Event_fab()
         {
+
+
             if (panel_jog.Visibility == Visibility.Visible)
             {
                 return;
@@ -1719,7 +1729,7 @@ namespace back_stopper
 
         private async void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
         {
-            //Event_fab();
+            Event_fab();
             //AutoControl();
             //AutoControl("520006648971");
             //var reportScreen = new ErrorReportDialog(idEmployee, employee?.name, txt_po.Text.Trim());
