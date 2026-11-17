@@ -89,35 +89,48 @@ namespace back_stopper.Database
 
         //dl hang
         private static string getDataforPo { get; } = @"
-            SELECT 
-                req.AUFNR,
-                req.GAMNG,
-                cmt.prt_addcmt2,
+            
+SELECT 
+    req.AUFNR,
+    req.GAMNG,
+    cmt.PRT_ADDCMT1,
 
-                CASE 
-                    WHEN DTL.RONAME IS NOT NULL 
-                         AND LTRIM(RTRIM(DTL.RONAME)) <> '' 
-                        THEN DTL.RONAME 
-                    ELSE req.PHTX 
-                END AS ProductName,
+    CASE 
+        WHEN DTL.RONAME IS NOT NULL 
+             AND LTRIM(RTRIM(DTL.RONAME)) <> '' 
+            THEN DTL.RONAME 
+        ELSE req.PHTX 
+    END AS ProductName,
 
-                req.PSTX,
-                pc_master.AirHole,
-                pc_master.AirHole_Tol_Low,
-	            pc_master.AirHole_Tol_Up
+    req.PSTX,
 
-            FROM MANUFASPCPD.dbo.MANUFA_F_PD_DT_REQ_HED req
+    -- Ưu tiên lấy theo mã vật tư; nếu AirHole NULL thì lấy theo so sánh tên (fallback)
+    CASE WHEN pc_master.AirHole IS NOT NULL THEN pc_master.AirHole         ELSE pc_fb.AirHole         END AS AirHole,
+    CASE WHEN pc_master.AirHole IS NOT NULL THEN pc_master.AirHole_Tol_Low ELSE pc_fb.AirHole_Tol_Low END AS AirHole_Tol_Low,
+    CASE WHEN pc_master.AirHole IS NOT NULL THEN pc_master.AirHole_Tol_Up  ELSE pc_fb.AirHole_Tol_Up  END AS AirHole_Tol_Up
 
-            LEFT JOIN MANUFASPCPD.dbo.MANUFA_F_PD_DT_ORDER_DTL DTL 
-                ON req.KDAUF = DTL.VBELN
+FROM MANUFASPCPD.dbo.MANUFA_F_PD_DT_REQ_HED req
 
-            LEFT JOIN MANUFASPCPD.dbo.MANUFA_F_PD_DT_REQ_CMT CMT 
-                ON req.AUFNR = CMT.AUFNR
+LEFT JOIN MANUFASPCPD.dbo.MANUFA_F_PD_DT_ORDER_DTL DTL 
+    ON req.KDAUF = DTL.VBELN
 
-            LEFT JOIN F2Database.dbo.F2_PC_MASTER_2 pc_master
-                ON req.PHCD = pc_master.C_MATNR
+LEFT JOIN MANUFASPCPD.dbo.MANUFA_F_PD_DT_REQ_CMT cmt 
+    ON req.AUFNR = cmt.AUFNR
 
-            WHERE req.AUFNR = @po
+LEFT JOIN F2Database.dbo.F2_PC_MASTER_2 pc_master
+    ON req.PHCD = pc_master.C_MATNR
+
+-- Fallback: chỉ chạy khi AirHole ở trên bị NULL
+OUTER APPLY (
+    SELECT TOP 1 
+        p.AirHole, p.AirHole_Tol_Low, p.AirHole_Tol_Up
+    FROM F2Database.dbo.F2_PC_MASTER_2 p
+    WHERE pc_master.AirHole IS NULL
+      AND LTRIM(RTRIM(p.C_MAKTX)) = LTRIM(RTRIM(cmt.PRT_ADDCMT1))
+      AND p.AirHole IS NOT NULL
+) pc_fb
+
+WHERE req.AUFNR = @po
             ";
 
         public static async Task<productData> GetProductInfo(string po)
@@ -151,7 +164,9 @@ namespace back_stopper.Database
                                 Gamng = reader["GAMNG"] != DBNull.Value
                                     ? Convert.ToInt32(reader["GAMNG"])
                                     : 0,
-                                Prt_addcmt2 = reader["prt_addcmt2"]?.ToString(),
+                                //Prt_addcmt2 = reader["prt_addcmt2"]?.ToString(),
+                                Prt_addcmt2 = reader["PRT_ADDCMT1"]?.ToString(),
+
 
                                 ProductName = reader["ProductName"]?.ToString(),
 
