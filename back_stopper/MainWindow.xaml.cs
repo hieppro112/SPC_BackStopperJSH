@@ -1729,6 +1729,8 @@ namespace back_stopper
 
         private async void btn_toggle_panel_Click(object sender, RoutedEventArgs e)
         {
+
+
             Event_fab();
             //AutoControl();
             //AutoControl("520006648971");
